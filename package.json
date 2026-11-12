@@ -1,0 +1,12 @@
+{
+  "name": "kvadrat-eiendomsutvikling",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Lokal markedsoversikt og prosjektøkonomi for eiendomsutvikling i Trondheim",
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "test": "node --test tests/core.test.mjs"
+  }
+}
