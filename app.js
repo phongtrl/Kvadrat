@@ -33,14 +33,36 @@ function icon(name){return `<svg viewBox="0 0 24 24" fill="none" stroke="current
 function renderIcons(root=document){root.querySelectorAll('[data-icon]').forEach(el=>el.innerHTML=icon(el.dataset.icon));}
 renderIcons();
 
-const KEY='kvadrat-workspace-v1';
-let state={schemaVersion:SCHEMA_VERSION,sales:[],projects:[]}, demoSales=[],filtered=[],map,markerGroup,addressMarker,selectedId=null,currentPage='marked',editingExpenses=[],editingTasks=[],storageAvailable=true;
+let state={schemaVersion:SCHEMA_VERSION,sales:[],projects:[]}, demoSales=[],filtered=[],map,markerGroup,addressMarker,selectedId=null,currentPage='marked',editingExpenses=[],editingTasks=[],revision=null,saving=false,ready=false,needsReload=false;
 let toastTimer;
 function toast(message,error=false){clearTimeout(toastTimer);$('#toast').textContent=message;$('#toast').classList.toggle('error',error);$('#toast').hidden=false;toastTimer=setTimeout(()=>$('#toast').hidden=true,5500);}
-function commit(next){
-  try{localStorage.setItem(KEY,JSON.stringify(next));state=next;storageAvailable=true;return true;}
-  catch(e){storageAvailable=false;toast('Lagring mislyktes. Frigjør plass eller tillat lokal lagring. Endringene er ikke lagret.',true);return false;}
+function syncStatus(message,problem=false){$('.local-status').textContent=message;$('.local-status').classList.toggle('sync-problem',problem);}
+async function commit(next){
+  if(!ready||saving||needsReload){toast(needsReload?'Hent siste versjon før du lagrer.':'Vent til arbeidsområdet er klart.',true);return false;}
+  saving=true;syncStatus('Lagrer på nett …');
+  try{
+    const response=await fetch('/api/workspace',{method:'PUT',credentials:'same-origin',signal:AbortSignal.timeout(20000),headers:{'Content-Type':'application/json','If-Match':String(revision)},body:JSON.stringify(next)});
+    const result=await response.json();
+    if(!response.ok){if(response.status===409)needsReload=true;throw new Error(result.error||'Lagring mislyktes.');}
+    revision=result.revision;state=next;syncStatus('Lagret på nett');return true;
+  }catch(e){syncStatus(needsReload?'Ny versjon tilgjengelig':'Ikke lagret',true);toast(`${e.message} Endringene er ikke bekreftet lagret.`,true);return false;}
+  finally{saving=false;}
 }
+async function loadWorkspace(background=false){
+  if(saving)return;
+  if(!background){$('main').inert=true;syncStatus('Kobler til …');}
+  try{
+    const response=await fetch('/api/workspace',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000)});
+    if(!response.headers.get('content-type')?.includes('application/json'))throw new Error('Logg inn for å åpne arbeidsområdet.');
+    const result=await response.json();if(!response.ok)throw new Error(result.error||'Arbeidsområdet kunne ikke lastes.');
+    if(saving||$('#project-dialog').open||$('#sale-dialog').open)return;
+    state=validateBackup(result.workspace);revision=result.revision;ready=true;needsReload=false;
+    $('#cloud-error').hidden=true;$('main').inert=false;syncStatus('Lagret på nett');
+    $('#account-name').textContent=result.user.displayName;renderAll();
+  }catch(e){syncStatus('Frakoblet',true);if(!background){$('#cloud-error-message').textContent=e.message;$('#cloud-error').hidden=false;}}
+  finally{if(ready)$('main').inert=false;}
+}
+
 function backup(){download(`kvadrat-sikkerhetskopi-${new Date().toISOString().slice(0,10)}.json`,JSON.stringify({...state,exportedAt:new Date().toISOString()},null,2),'application/json');toast('Sikkerhetskopi lastet ned.');}
 function download(name,content,type='text/plain'){const url=URL.createObjectURL(new Blob([content],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 async function confirmAction(title,message){const d=$('#confirm-dialog');$('#confirm-title').textContent=title;$('#confirm-message').textContent=message;d.returnValue='';d.showModal();return new Promise(resolve=>d.addEventListener('close',()=>resolve(d.returnValue==='confirm'),{once:true}));}
@@ -125,7 +147,7 @@ function openProject(id,prefill={}){
   const defaults={...prefill};const values=p||defaults;
   for(const [key,value] of Object.entries(values)){if(form.elements.namedItem(key)&&!['expenses','tasks'].includes(key))form.elements.namedItem(key).value=value;}
   editingExpenses=structuredClone(p?.expenses||[]);editingTasks=structuredClone(p?.tasks||[]);
-  $('#project-dialog-title').textContent=p?p.name:'En ny mulighet.';$('#project-tracking').hidden=!p;$('#delete-project').hidden=!p;
+  $('#project-dialog-title').textContent=p?p.name:'En ny mulighet.';$('#project-tracking').hidden=false;$('#delete-project').hidden=!p;
   $('#expense-description').value='';$('#expense-amount').value='';$('#task-description').value='';
   renderTracking();renderLiveCalculation();$('#project-dialog').showModal();
 }
@@ -141,13 +163,13 @@ async function importSales(file){
     // Bevar merking når eksempeldata eksporteres og importeres på nytt.
     const rows=validateSales(raw,true);for(let i=0;i<rows.length;i++){if(raw[i].demo===true||String(raw[i].demo).toLowerCase()==='true'||rows[i].id.startsWith('demo-')||/fiktiv|eksempeldata/i.test(rows[i].source))rows[i].demo=true;}
     const byId=new Map(state.sales.map(s=>[s.id,s]));let replaced=0;for(const row of rows){if(byId.has(row.id))replaced++;byId.set(row.id,row);}if(byId.size>5000)throw new Error('Maks 5 000 salg totalt. Fjern eksempeldata eller bruk et mindre utvalg.');
-    if(!commit({...state,sales:[...byId.values()]}))return;renderAll();result.classList.remove('error');result.textContent=`Import fullført: ${rows.length-replaced} nye salg, ${replaced} erstattet. Velg «Hele datasettet» på kartet hvis eldre salg ikke vises.`;toast('Salgsdata importert.');
-  }catch(e){result.classList.add('error');result.textContent=`Import avbrutt: ${e.message} Ingen data er endret.`;toast('Importen kunne ikke fullføres.',true);}}
+    if(!await commit({...state,sales:[...byId.values()]}))return false;renderAll();result.classList.remove('error');result.textContent=`Import fullført: ${rows.length-replaced} nye salg, ${replaced} erstattet. Velg «Hele datasettet» på kartet hvis eldre salg ikke vises.`;toast('Salgsdata er lagret på nett.');return true;
+  }catch(e){result.classList.add('error');result.textContent=`Import avbrutt: ${e.message} Ingen data er endret.`;toast('Importen kunne ikke fullføres.',true);return false;}}
 
 let searchTimer,searchController,searchVersion=0;
 $('#address-search').addEventListener('input',()=>{clearTimeout(searchTimer);searchController?.abort();const version=++searchVersion;const q=$('#address-search').value.trim(),results=$('#address-results');if(q.length<3){results.hidden=true;return;}results.hidden=false;results.textContent='Søker i Kartverkets adressedata …';searchTimer=setTimeout(async()=>{
   searchController=new AbortController();const timeout=setTimeout(()=>searchController.abort(),10000);
-  try{const url=new URL('https://ws.geonorge.no/adresser/v1/sok');url.search=new URLSearchParams({sok:q,kommunenummer:'5001',treffPerSide:'6',utkoordsys:'4258',fuzzy:'true'});const r=await fetch(url,{signal:searchController.signal});if(!r.ok)throw new Error();const data=await r.json();if(version!==searchVersion)return;const rows=(data.adresser||[]).filter(a=>a.kommunenummer==='5001');results.innerHTML=rows.length?rows.map((a,i)=>`<button type="button" data-address-index="${i}">${escape(a.adressetekst)}<br><small>${escape(a.postnummer)} ${escape(a.poststed)}</small></button>`).join(''):'Ingen adresser funnet i Trondheim. Prøv gate og husnummer.';
+  try{const url=new URL('/api/addresses',location.origin);url.searchParams.set('q',q);const r=await fetch(url,{signal:searchController.signal});if(!r.ok)throw new Error();const data=await r.json();if(version!==searchVersion)return;const rows=(data.adresser||[]).filter(a=>a.kommunenummer==='5001');results.innerHTML=rows.length?rows.map((a,i)=>`<button type="button" data-address-index="${i}">${escape(a.adressetekst)}<br><small>${escape(a.postnummer)} ${escape(a.poststed)}</small></button>`).join(''):'Ingen adresser funnet i Trondheim. Prøv gate og husnummer.';
     results.querySelectorAll('button').forEach((b,i)=>b.onclick=()=>{const a=rows[i],pos=a.representasjonspunkt;results.hidden=true;$('#address-search').value=a.adressetekst;if(map){if(addressMarker)map.removeLayer(addressMarker);addressMarker=L.circleMarker([pos.lat,pos.lon],{radius:9,color:'#b78a55',fillColor:'#fff',fillOpacity:1,weight:3}).addTo(map);map.setView([pos.lat,pos.lon],17);}selectedId=null;$('#insight-panel').innerHTML=`<div class="insight-label">ADRESSE FRA KARTVERKET ${icon('check')}</div><div class="area-heading"><span class="area-icon">${icon('pin')}</span><div><h2 style="font-size:17px">${escape(a.adressetekst)}</h2><small>${escape(a.postnummer)} ${escape(a.poststed)}</small></div></div><div class="insight-rows"><div class="insight-row"><span>Kommune</span><strong>Trondheim · 5001</strong></div><div class="insight-row"><span>Breddegrad</span><strong>${num(pos.lat,5)}</strong></div><div class="insight-row"><span>Lengdegrad</span><strong>${num(pos.lon,5)}</strong></div></div><p class="insight-note">Dette er offisielle adressedata. Salgspris, areal og tilstand følger ikke med adresseoppslaget.</p><button class="button primary" id="project-from-address">${icon('plus')} Vurder som prosjekt</button>`;$('#project-from-address').onclick=()=>openProject(null,{address:a.adressetekst,name:a.adressetekst,lat:pos.lat,lng:pos.lon,notes:'Adresse og koordinater fra Kartverkets Adresse REST-API. Alle økonomiske felt er foreløpige standardverdier og må vurderes.'});});
   }catch(e){if(version===searchVersion){results.textContent='Adressesøket er utilgjengelig akkurat nå. Kontroller nettilgangen og prøv igjen.';}}
   finally{clearTimeout(timeout);}
@@ -158,8 +180,8 @@ $('#address-search').addEventListener('keydown',e=>{if(e.key==='Escape')$('#addr
 $$('[data-action="new-project"]').forEach(b=>b.onclick=()=>openProject());
 $$('.close-dialog').forEach(b=>b.onclick=()=>$('#project-dialog').close());
 $('#project-form').addEventListener('input',renderLiveCalculation);
-$('#project-form').addEventListener('submit',e=>{e.preventDefault();try{const p=validateProject(formProject());const existing=state.projects.some(x=>x.id===p.id);const projects=existing?state.projects.map(x=>x.id===p.id?p:x):[...state.projects,p];if(!commit({...state,projects}))return;$('#project-dialog').close();renderAll();location.hash='prosjekter';toast('Prosjektet er lagret.');}catch(err){toast(err.message,true);}});
-$('#delete-project').onclick=async()=>{const id=$('#project-id').value;if(!await confirmAction('Slette prosjektet?','Prosjektet, kostnader og oppgaver slettes fra nettleseren. Last ned en sikkerhetskopi først hvis du vil beholde dem.'))return;if(commit({...state,projects:state.projects.filter(p=>p.id!==id)})){$('#project-dialog').close();renderAll();toast('Prosjektet er slettet.');}};
+$('#project-form').addEventListener('submit',async e=>{e.preventDefault();try{const p=validateProject(formProject());const existing=state.projects.some(x=>x.id===p.id);const projects=existing?state.projects.map(x=>x.id===p.id?p:x):[...state.projects,p];if(!await commit({...state,projects}))return;$('#project-dialog').close();renderAll();location.hash='prosjekter';toast('Prosjektet er lagret.');}catch(err){toast(err.message,true);}});
+$('#delete-project').onclick=async()=>{const id=$('#project-id').value;if(!await confirmAction('Slette prosjektet?','Prosjektet, kostnader og oppgaver slettes fra arbeidsområdet på nett. Last ned en sikkerhetskopi først hvis du vil beholde dem.'))return;if(await commit({...state,projects:state.projects.filter(p=>p.id!==id)})){$('#project-dialog').close();renderAll();toast('Prosjektet er slettet.');}};
 $('#add-expense').onclick=()=>{const description=$('#expense-description').value.trim(),amount=Number($('#expense-amount').value);if(!description||!Number.isFinite(amount)||amount<=0||amount>1e9){toast('Skriv en beskrivelse og et gyldig kostnadsbeløp.',true);return;}if(editingExpenses.length>=1000){toast('Maks 1 000 kostnader per prosjekt.',true);return;}editingExpenses.push({id:crypto.randomUUID(),description,amount});$('#expense-description').value='';$('#expense-amount').value='';renderTracking();renderLiveCalculation();};
 $('#add-task').onclick=()=>{const description=$('#task-description').value.trim();if(!description){$('#task-description').focus();return;}if(editingTasks.length>=1000){toast('Maks 1 000 oppgaver per prosjekt.',true);return;}editingTasks.push({id:crypto.randomUUID(),description,done:false});$('#task-description').value='';renderTracking();};
 $('#project-tracking').addEventListener('click',e=>{const exp=e.target.closest('[data-remove-expense]'),task=e.target.closest('[data-remove-task]');if(exp){editingExpenses.splice(Number(exp.dataset.removeExpense),1);renderTracking();renderLiveCalculation();}if(task){editingTasks.splice(Number(task.dataset.removeTask),1);renderTracking();}});
@@ -174,18 +196,39 @@ $('#reset-filters').onclick=()=>{['#min-area','#max-area','#max-price'].forEach(
 $('#export-sales').onclick=()=>{if(!filtered.length){toast('Det er ingen salg å eksportere.',true);return;}download('kvadrat-salgsutvalg.csv',csvExport(filtered),'text/csv;charset=utf-8');};
 $('#sales-file').onchange=async e=>{const file=e.target.files[0];if(file)await importSales(file);e.target.value='';};
 $('#download-template').onclick=()=>download('kvadrat-importmal.csv',csvExport([{id:'demo-mal-001',address:'Fiktiv eksempeladresse',district:'Midtbyen',date:'2026-11-01',area:65,price:3900000,lat:63.4305,lng:10.3951,source:'Fiktive eksempeldata',demo:true}]),'text/csv;charset=utf-8');
-$('#remove-demo').onclick=async()=>{if(!await confirmAction('Fjerne eksempeldata?','Alle salg merket som eksempeldata fjernes. Dine importerte salg og prosjekter beholdes.'))return;if(commit({...state,sales:state.sales.filter(s=>!s.demo)})){renderAll();toast('Eksempeldata er fjernet.');}};
-$('#restore-demo').onclick=()=>{const ids=new Set(state.sales.map(s=>s.id));const sales=[...state.sales,...demoSales.filter(s=>!ids.has(s.id))];if(sales.length>5000){toast('Det er ikke plass til eksempeldata. Maks 5 000 salg totalt.',true);return;}if(commit({...state,sales})){renderAll();toast('Eksempeldata er gjenopprettet.');}};
+$('#remove-demo').onclick=async()=>{if(!await confirmAction('Fjerne eksempeldata?','Alle salg merket som eksempeldata fjernes. Dine importerte salg og prosjekter beholdes.'))return;if(await commit({...state,sales:state.sales.filter(s=>!s.demo)})){renderAll();toast('Eksempeldata er fjernet.');}};
+$('#restore-demo').onclick=async()=>{const ids=new Set(state.sales.map(s=>s.id));const sales=[...state.sales,...demoSales.filter(s=>!ids.has(s.id))];if(sales.length>5000){toast('Det er ikke plass til eksempeldata. Maks 5 000 salg totalt.',true);return;}if(await commit({...state,sales})){renderAll();toast('Eksempeldata er gjenopprettet.');}};
 $('#backup-button').onclick=backup;$('#backup-button-2').onclick=backup;
-$('#backup-file').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{const data=validateBackup(JSON.parse(await readSmallFile(file)));if(await confirmAction('Erstatte arbeidsområdet?','Salgsdata og prosjekter i denne nettleseren erstattes med sikkerhetskopien. Last ned en kopi av nåværende data først hvis du vil beholde dem.')){if(commit(data)){renderAll();toast('Sikkerhetskopien er gjenopprettet.');}}}catch(err){toast(`Kunne ikke gjenopprette: ${err.message}`,true);}finally{e.target.value='';}};
+$('#backup-file').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{const data=validateBackup(JSON.parse(await readSmallFile(file)));if(await confirmAction('Erstatte arbeidsområdet?','Salgsdata og prosjekter i arbeidsområdet på nett erstattes med sikkerhetskopien. Last ned en kopi av nåværende data først hvis du vil beholde dem.')){if(await commit(data)){renderAll();toast('Sikkerhetskopien er gjenopprettet.');}}}catch(err){toast(`Kunne ikke gjenopprette: ${err.message}`,true);}finally{e.target.value='';}};
 window.addEventListener('hashchange',route);
-window.addEventListener('storage',e=>{if(e.key!==KEY)return;try{if(e.newValue){state=validateBackup(JSON.parse(e.newValue));renderAll();toast('Arbeidsområdet er oppdatert fra en annen fane.');}}catch{toast('Kunne ikke lese endringer fra en annen fane.',true);}});
+$('#new-sale').onclick=()=>{const form=$('#sale-form');form.reset();$('#sale-address-results').textContent='';$('#sale-dialog').showModal();};
+$('#close-sale').onclick=$('#cancel-sale').onclick=()=>$('#sale-dialog').close();
+$('#sale-form').addEventListener('submit',async e=>{
+  e.preventDefault();
+  try{if(state.sales.length>=5000)throw new Error('Maks 5 000 salg totalt.');const form=$('#sale-form'),values=Object.fromEntries(new FormData(form));const sale=validateSale({...values,id:crypto.randomUUID(),demo:form.elements.demo.checked},true);if(await commit({...state,sales:[...state.sales,sale]})){$('#sale-dialog').close();renderAll();toast('Salget er lagret på nett.');}}
+  catch(error){toast(error.message,true);}
+});
+$('#sale-lookup').onclick=async()=>{
+  const form=$('#sale-form'),q=form.elements.address.value.trim(),results=$('#sale-address-results');
+  if(q.length<3){toast('Skriv gate og husnummer først.',true);return;}
+  results.textContent='Søker i Kartverkets adressedata …';
+  try{const response=await fetch('/api/addresses?'+new URLSearchParams({q}));const data=await response.json();if(!response.ok)throw new Error(data.error);const rows=data.adresser||[];results.innerHTML=rows.length?rows.map((a,i)=>`<button type="button" class="button light" data-result="${i}">${escape(a.adressetekst)} · ${escape(a.poststed)}</button>`).join(''):'Ingen treff i Trondheim. Prøv et mer presist søk.';results.querySelectorAll('button').forEach((button,i)=>button.onclick=()=>{const a=rows[i];form.elements.address.value=a.adressetekst;form.elements.lat.value=a.representasjonspunkt.lat;form.elements.lng.value=a.representasjonspunkt.lon;results.textContent='Adresse og koordinater hentet fra Kartverket.';});}
+  catch(error){results.textContent=error.message||'Kunne ikke hente adressen. Prøv igjen.';}
+};
+$('#paste-sales').onclick=()=>{$('#pasted-sales').value='';$('#paste-dialog').showModal();};
+$('#close-paste').onclick=()=>$('#paste-dialog').close();
+$('#paste-form').addEventListener('submit',async e=>{e.preventDefault();const text=$('#pasted-sales').value.trim();const file={name:text.startsWith('[')?'innlimt.json':'innlimt.csv',size:new TextEncoder().encode(text).byteLength,text:async()=>text};if(await importSales(file))$('#paste-dialog').close();});
+$('#reload-workspace').onclick=async()=>{
+  if(saving)return;
+  if(($('#project-dialog').open||$('#sale-dialog').open)&&!await confirmAction('Hente siste versjon?','Ulagrede endringer i skjemaet forkastes. Arbeidsområdet lastes inn fra nettet.'))return;
+  $('#project-dialog').close();$('#sale-dialog').close();await loadWorkspace();
+};
+$('#retry-cloud').onclick=()=>loadWorkspace();
+window.addEventListener('focus',()=>{if(ready&&!saving&&!needsReload&&!$('#project-dialog').open&&!$('#sale-dialog').open)loadWorkspace(true);});
 
 async function init(){
-  try{const r=await fetch('data/demo-sales.json');if(!r.ok)throw new Error();demoSales=validateSales(await r.json(),true);}catch{toast('Eksempeldata kunne ikke lastes. Bruk start.bat eller node server.mjs for å starte verktøyet.',true);}
-  try{const saved=localStorage.getItem(KEY);if(saved)state=validateBackup(JSON.parse(saved));else{state.sales=demoSales;commit(state);}}
-  catch{storageAvailable=false;state={schemaVersion:SCHEMA_VERSION,sales:demoSales,projects:[]};toast('Lagrede data kunne ikke leses. De er ikke overskrevet. Prøv en sikkerhetskopi eller eksporter data fra en fungerende fane.',true);}
-  if(!storageAvailable){$('.local-status').innerHTML='<i style="background:#b8865b"></i>Lagring utilgjengelig';}
-  initMap();renderAll();route();setMapView(true);
+  $('main').inert=true;
+  try{const r=await fetch('/data/demo-sales.json');if(r.ok)demoSales=validateSales(await r.json(),true);}catch{}
+  initMap();route();setMapView(true);await loadWorkspace();
 }
 init();
