@@ -22,3 +22,10 @@ test('database outages return a failure without pretending to save',async()=>{as
 test('compiled hosted Worker serves assets without exposing source or developer routes',async()=>{const {default:compiled}=await import('../dist/server/index.js');const env=database();const response=await compiled.fetch(new Request(origin+'/'),env);assert.equal(response.status,200);const html=await response.text();assert.match(html,/Lagret|lagret på nett/);assert.doesNotMatch(html,/start\.bat|Lokal lagring/);assert.equal((await compiled.fetch(new Request(origin+'/app.js'),env)).status,200);for(const file of ['/.git/config','/.openai/hosting.json','/scripts/dev-server.mjs'])assert.equal((await compiled.fetch(new Request(origin+file),env)).status,404);});
 
 test('listing favorites survive cloud save and remain account-scoped',async()=>{const env=database();const alice=await(await worker.fetch(request(),env)).json();const seed=JSON.parse(readFileSync(new URL('../data/listings.json',import.meta.url))).listings;const body={...alice.workspace,listings:[{...seed[0],favorite:true}]};assert.equal((await worker.fetch(request('alice','PUT',body),env)).status,200);const reopened=await(await worker.fetch(request(),env)).json();assert.equal(reopened.workspace.listings[0].favorite,true);assert.equal(reopened.workspace.sales.length,40);const bob=await(await worker.fetch(request('bob'),env)).json();assert.equal(bob.workspace.listings,undefined);});
+test('property map records survive cloud writes and remain scoped to their owner',async()=>{
+ const env=database();const alice=await(await worker.fetch(request(),env)).json();
+ const property={id:'steinkjer',address:'Min bolig',stage:'historisk',lat:64.015,lng:11.495,notes:'Ferdig oppusset',completedAt:'2025-12-01'};
+ assert.equal((await worker.fetch(request('alice','PUT',{...alice.workspace,properties:[property]}),env)).status,200);
+ const reopened=await(await worker.fetch(request(),env)).json();assert.deepEqual(reopened.workspace.properties,[property]);assert.equal(reopened.workspace.sales.length,40);
+ assert.equal((await(await worker.fetch(request('bob'),env)).json()).workspace.properties,undefined);
+});

@@ -1,3 +1,4 @@
+import {createPropertyMap} from './property-map.js';
 import {loadHistoricalMarket} from './historical-market.js';
 import {apiFetch,setApiToken} from './api-client.js';
 import {postAuth,readApiResponse} from './auth-client.js';
@@ -39,7 +40,7 @@ renderIcons();
 
 let state={schemaVersion:SCHEMA_VERSION,sales:[],projects:[]}, demoSales=[],filtered=[],map,markerGroup,addressMarker,selectedId=null,currentPage='annonser',editingExpenses=[],editingTasks=[],revision=null,saving=false,ready=false,needsReload=false;
 let authVersion=0;
-let listingUI;
+let listingUI,propertyUI;
 let toastTimer;
 function toast(message,error=false){clearTimeout(toastTimer);$('#toast').textContent=message;$('#toast').classList.toggle('error',error);$('#toast').hidden=false;toastTimer=setTimeout(()=>$('#toast').hidden=true,5500);}
 function syncStatus(message,problem=false){$('.local-status').textContent=message;$('.local-status').classList.toggle('sync-problem',problem);}
@@ -62,7 +63,7 @@ async function loadWorkspace(background=false){
     const response=await apiFetch('/api/workspace',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000)});
     if(!response.headers.get('content-type')?.includes('application/json'))throw new Error('Logg inn for å åpne arbeidsområdet.');
     const result=await readApiResponse(response);if(startedVersion!==authVersion)return;if(response.status===401){showLogin();return;}if(!response.ok)throw new Error(result.error||'Arbeidsområdet kunne ikke lastes.');
-    if(saving||$('#project-dialog').open||$('#sale-dialog').open||$('#listing-dialog').open||$('#listing-import-dialog').open)return;
+    if(saving||$('#project-dialog').open||$('#sale-dialog').open||$('#listing-dialog').open||$('#listing-import-dialog').open||$('#property-dialog').open)return;
     state=validateBackup(result.workspace);revision=result.revision;ready=true;needsReload=false;
     $('#cloud-error').hidden=true;$('#login-screen').hidden=true;document.body.classList.remove('signed-out');$('main').inert=false;syncStatus('Lagret på nett');route();
     $('#account-name').textContent=result.user.displayName;renderAll();
@@ -149,8 +150,8 @@ function renderAnalysis(){
   $('#analysis-content').innerHTML=`<div class="stats-grid three">${stat('Salg i aktivt utvalg',String(filtered.length),'salg',`${demo} fiktive · ${filtered.length-demo} importerte`,'building')}${stat('Median pris per m²',num(median(filtered.map(s=>s.price/s.area))),'kr / m²','Median av hvert salgs pris / BRA-i','chart')}${stat('Områder i utvalget',String(grouped.length),'områder','Områdenavn kommer fra salgsdataene','map')}</div><div class="analysis-grid"><article class="panel"><h2>Prisnivå per område</h2><p class="small-copy">Median pris per m² · gjeldende filtre</p><div class="chart-bars">${grouped.length?grouped.map(g=>`<div><div class="chart-bar-top"><span>${escape(g.name)}</span><strong>${num(g.price)} kr / m²</strong></div><div class="chart-track"><div class="chart-fill" style="width:${g.price/max*100}%"></div></div><div class="chart-count">${g.rows.length} salg ${g.rows.length<5?'· Lite utvalg':''}</div></div>`).join(''):'<div class="empty-state">Ingen data i utvalget.</div>'}</div></article><article class="panel"><h2>Hvor mange blir solgt?</h2><p class="small-copy">Månedlig antall salg i ditt datasett</p><div class="month-chart">${months.map(g=>`<div class="month-column"><strong>${g.sales.length}</strong><div style="height:${g.sales.length/countMax*135}px" title="${escape(g.key)}: ${g.sales.length} salg"></div><span>${escape(g.label)}</span></div>`).join('')||'<div class="empty-state">Ingen data i utvalget.</div>'}</div><p class="analysis-footnote">Seks måneder frem til nyeste salg i utvalget. Antall gjelder kun tilgjengelige salgsrader, og viser ikke hele markedets omsetning.</p><div class="notice" style="margin-top:24px;margin-bottom:0">Sammenlign boliger med lignende størrelse, eierform og standard før du setter forventet salgspris. Datasettet i denne versjonen har ikke tilstand eller eierform per salg.</div></article></div><article class="panel"><h2>Hvor følsomme er prosjektene dine?</h2><p class="small-copy">Fortjeneste før skatt ved 5 % lavere, forventet og 5 % høyere salgspris. Øvrige kostnader holdes uendret.</p>${state.projects.length?`<div class="table-wrap sensitivity"><table><thead><tr><th>Prosjekt</th><th>−5 % salgspris</th><th>Forventet</th><th>+5 % salgspris</th></tr></thead><tbody>${state.projects.map(p=>{const c=calculate(p);return `<tr><td>${escape(p.name)}</td>${[-.05,0,.05].map(f=>`<td class="${c.profit+p.resale*f<0?'negative':'positive'}">${kr(c.profit+p.resale*f)}</td>`).join('')}</tr>`;}).join('')}</tbody></table></div>`:'<p>Opprett et prosjekt for å sammenligne scenarioer.</p>'}</article>`;
 }
 function renderData(){const n=state.sales.filter(s=>s.demo).length;$('#dataset-summary').textContent=`${state.sales.length} salg totalt · ${n} eksempeldata · ${state.sales.length-n} importerte salg · ${state.projects.length} prosjekter.`;$('#remove-demo').disabled=!n;$('#restore-demo').disabled=demoSales.length>0&&demoSales.every(s=>state.sales.some(x=>x.id===s.id));}
-function renderAll(){listingUI?.render();refreshAreaOptions();renderMarket();renderProjects();renderData();if(currentPage==='analyse')renderAnalysis();}
-function route(){const names={annonser:'Boliger fra FINN',marked:'Markedskart',prosjekter:'Mine prosjekter',analyse:'Markedsanalyse',datakilder:'Data og import'};currentPage=location.hash.slice(1);if(!names[currentPage])currentPage='annonser';$$('.page').forEach(el=>el.hidden=el.id!==`page-${currentPage}`);$$('nav a').forEach(el=>{el.classList.toggle('active',el.dataset.page===currentPage);if(el.dataset.page===currentPage)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');});$('#breadcrumb-title').textContent=names[currentPage];if(currentPage==='annonser')listingUI?.activate();if(currentPage==='analyse')renderAnalysis();if(currentPage==='marked'){initMap();if(map)setTimeout(()=>map.invalidateSize(),50);}}
+function renderAll(){propertyUI?.render();listingUI?.render();refreshAreaOptions();renderMarket();renderProjects();renderData();if(currentPage==='analyse')renderAnalysis();}
+function route(){const names={annonser:'Boliger fra FINN',boligkart:'Mitt boligkart',marked:'Markedskart (beta test)',prosjekter:'Mine prosjekter',analyse:'Markedsanalyse',datakilder:'Data og import'};currentPage=location.hash.slice(1);if(!names[currentPage])currentPage='annonser';$$('.page').forEach(el=>el.hidden=el.id!==`page-${currentPage}`);$$('nav a').forEach(el=>{el.classList.toggle('active',el.dataset.page===currentPage);if(el.dataset.page===currentPage)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');});$('#breadcrumb-title').textContent=names[currentPage];if(currentPage==='boligkart')propertyUI?.activate();if(currentPage==='annonser')listingUI?.activate();if(currentPage==='analyse')renderAnalysis();if(currentPage==='marked'){initMap();if(map)setTimeout(()=>map.invalidateSize(),50);}}
 
 function formProject(){const values=Object.fromEntries(new FormData($('#project-form')));for(const field of NUMERIC_FIELDS)values[field]=Number(values[field]);return {...values,id:$('#project-id').value||crypto.randomUUID(),expenses:editingExpenses,tasks:editingTasks};}
 function openProject(id,prefill={}){
@@ -232,11 +233,11 @@ $('#close-paste').onclick=()=>$('#paste-dialog').close();
 $('#paste-form').addEventListener('submit',async e=>{e.preventDefault();const text=$('#pasted-sales').value.trim();const file={name:text.startsWith('[')?'innlimt.json':'innlimt.csv',size:new TextEncoder().encode(text).byteLength,text:async()=>text};if(await importSales(file))$('#paste-dialog').close();});
 $('#reload-workspace').onclick=async()=>{
   if(saving)return;
-  if(($('#project-dialog').open||$('#sale-dialog').open||$('#listing-dialog').open||$('#listing-import-dialog').open)&&!await confirmAction('Hente siste versjon?','Ulagrede endringer i skjemaet forkastes. Arbeidsområdet lastes inn fra nettet.'))return;
-  $('#project-dialog').close();$('#sale-dialog').close();$('#listing-dialog').close();$('#listing-import-dialog').close();await loadWorkspace();
+  if(($('#project-dialog').open||$('#sale-dialog').open||$('#listing-dialog').open||$('#listing-import-dialog').open||$('#property-dialog').open)&&!await confirmAction('Hente siste versjon?','Ulagrede endringer i skjemaet forkastes. Arbeidsområdet lastes inn fra nettet.'))return;
+  $('#project-dialog').close();$('#sale-dialog').close();$('#listing-dialog').close();$('#listing-import-dialog').close();$('#property-dialog').close();await loadWorkspace();
 };
 $('#retry-cloud').onclick=()=>loadWorkspace();
-window.addEventListener('focus',()=>{if(ready&&!saving&&!needsReload&&!$('#project-dialog').open&&!$('#sale-dialog').open&&!$('#listing-dialog').open&&!$('#listing-import-dialog').open)loadWorkspace(true);});
+window.addEventListener('focus',()=>{if(ready&&!saving&&!needsReload&&!$('#project-dialog').open&&!$('#sale-dialog').open&&!$('#listing-dialog').open&&!$('#listing-import-dialog').open&&!$('#property-dialog').open)loadWorkspace(true);});
 
 function showLogin(){
   authVersion++;setApiToken('');ready=false;revision=null;needsReload=false;$('main').inert=true;document.body.classList.add('signed-out');$('#login-screen').hidden=false;
@@ -265,4 +266,5 @@ async function init(){
 }
 $('#login-form').dataset.ready='true';$('#login-submit').disabled=false;
 listingUI=createListingOverview({getState:()=>state,commit,openProject,toast,escape,kr,num,stat});
+propertyUI=createPropertyMap({getState:()=>state,commit,toast,escape});
 init();

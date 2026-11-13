@@ -39,8 +39,9 @@ export async function handleApi(request,env){
   if(url.pathname==='/api/addresses'){
     if(request.method!=='GET')return error('Metoden er ikke tillatt.',405);
     const q=(url.searchParams.get('q')||'').trim();if(q.length<3||q.length>200)return error('Søk med mellom 3 og 200 tegn.',400);
-    const upstream=new URL('https://ws.geonorge.no/adresser/v1/sok');upstream.search=new URLSearchParams({sok:q,kommunenummer:'5001',treffPerSide:'6',utkoordsys:'4258',fuzzy:'true'});
-    try{const response=await fetch(upstream,{signal:AbortSignal.timeout(8000)});if(!response.ok)throw new Error();const result=await response.json();return json({adresser:(result.adresser||[]).filter(a=>a.kommunenummer==='5001')});}
+    const county=url.searchParams.get('scope')==='trondelag';
+    const upstream=new URL('https://ws.geonorge.no/adresser/v1/sok');upstream.search=new URLSearchParams({sok:q,...(county?{}:{kommunenummer:'5001'}),treffPerSide:county?'100':'8',utkoordsys:'4258',fuzzy:'true'});
+    try{const response=await fetch(upstream,{signal:AbortSignal.timeout(8000)});if(!response.ok)throw new Error();const result=await response.json();return json({adresser:(result.adresser||[]).filter(a=>county?String(a.kommunenummer).startsWith('50'):a.kommunenummer==='5001')});}
     catch{return error('Kartverkets adressesøk er midlertidig utilgjengelig. Prøv igjen.',502);}
   }
   if(url.pathname!=='/api/workspace')return error('Fant ikke endepunktet.',404);

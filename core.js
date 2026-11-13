@@ -116,7 +116,19 @@ export function validateBackup(data) {
     result.listings=data.listings.map(validateListing);
     if(new Set(result.listings.map(l=>l.id)).size!==result.listings.length)throw new Error('Dupliserte FINN-koder.');
   }
+  if(data.properties!==undefined){
+    if(!Array.isArray(data.properties)||data.properties.length>2000)throw new Error('Maks 2 000 boliger på boligkartet.');
+    result.properties=data.properties.map(validateProperty);
+    if(new Set(result.properties.map(p=>p.id)).size!==result.properties.length)throw new Error('Dupliserte bolig-ID-er.');
+  }
   return result;
+}
+
+export function validateProperty(p){
+  if(!p||!['potensiell','aktiv','historisk'].includes(p.stage))throw new Error('Ugyldig boligstatus.');
+  const date=p.completedAt||'';
+  if(date&&(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date))||new Date(date).toISOString().slice(0,10)!==date||date>new Date().toISOString().slice(0,10)))throw new Error('Ugyldig ferdigdato.');
+  return {id:textField(p.id,'Bolig-ID',100),address:textField(p.address,'Adresse',200),stage:p.stage,lat:numberField(p.lat,'Breddegrad',62,66),lng:numberField(p.lng,'Lengdegrad',8,15),notes:typeof p.notes==='string'?p.notes.slice(0,5000):'',completedAt:date};
 }
 
 export function validateListing(l){
