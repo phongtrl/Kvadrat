@@ -1,3 +1,4 @@
+import {loadHistoricalMarket} from './historical-market.js';
 import {apiFetch,setApiToken} from './api-client.js';
 import {postAuth,readApiResponse} from './auth-client.js';
 import {createListingOverview} from './listings.js';
@@ -258,6 +259,7 @@ $('#password-form').addEventListener('submit',async e=>{e.preventDefault();const
 
 async function init(){
   $('main').inert=true;
+  loadHistoricalMarket();
   try{const r=await fetch(new URL('./data/demo-sales.json',import.meta.url));if(r.ok)demoSales=validateSales(await r.json(),true);}catch{}
   route();setMapView(true);await loadWorkspace();
 }
