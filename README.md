@@ -4,7 +4,7 @@ Nettbasert verktøy for å undersøke oppussingsobjekter og følge prosjektøkon
 
 ## Åpne Kvadrat på nett
 
-Kvadrat brukes som en privat nettside. Åpne den publiserte lenken og logg inn med ChatGPT. Det kreves ingen lokal installasjon, server, Node.js eller filer for vanlig bruk. Prosjekter, oppgaver, oppussingskostnader og salgsdata lagres i en hosted Cloudflare D1-database og følger den innloggede kontoen på tvers av enheter.
+Kvadrat brukes som en privat nettside. Åpne den publiserte lenken og logg inn med brukernavn og passord. Det kreves ingen lokal installasjon, server, Node.js eller filer for vanlig bruk. Prosjekter, oppgaver, oppussingskostnader og salgsdata lagres i en hosted Cloudflare D1-database og følger den innloggede kontoen på tvers av enheter.
 
 Du kan registrere salg i skjemaet under «Data og import», finne adressekoordinater med Kartverket eller lime inn CSV/JSON direkte på siden. Filimport, eksport og nedlasting av sikkerhetskopi er valgfrie tilleggsfunksjoner.
 
@@ -18,7 +18,7 @@ Du kan registrere salg i skjemaet under «Data og import», finne adressekoordin
 - Prosjektkalkyle med dokumentavgift, oppussingsbuffer, finansiering, salgsomkostninger og løpende utgifter.
 - Prosjektstatus, notater, faktiske oppussingskostnader og oppgaveliste.
 - Scenarioanalyse ved ±5 % endring i forventet salgspris.
-- Privat skylagring knyttet til ChatGPT-innlogging, eksport av salgsutvalg og valgfri sikkerhetskopiering.
+- Privat skylagring knyttet til admin-kontoen, eksport av salgsutvalg og valgfri sikkerhetskopiering.
 - Registrer salg og lim inn CSV/JSON direkte på siden.
 - Versjonskontroll som stopper gamle faner fra å overskrive nyere endringer.
 
@@ -88,7 +88,11 @@ Sett dokumentavgiftsgrunnlaget til riktig avgiftsgrunnlag (0 ved fritak). Andre 
 
 ## Skylagring og tilgang
 
-Sites håndterer ChatGPT-innlogging og privat tilgang. API-et krever `oai-authenticated-user-id` fra plattformen, og alle databaseoperasjoner avgrenses med denne ID-en. Klienten kan ikke angi eller bytte eier-ID. E-post brukes bare til visning. Utviklingsidentitet finnes utelukkende i en separat utviklingsadapter som ikke inngår i produksjonsbygget.
+Appen har egen innlogging på serveren. Publisert tilgang må settes til offentlig i Sites slik at innloggingssiden kan åpnes uten ChatGPT; dette gjør ikke prosjekt-API-et offentlig. Alle data- og adressesøk krever en gyldig, åtte timers serversesjon. Kontonavnet er `admin`; innloggingsopplysninger ligger ikke i frontend eller i GitHub-repoet.
+
+Passord lagres som saltet PBKDF2-SHA256-hash med 100 000 iterasjoner. Øktnøkler er tilfeldige 256-bits verdier; bare SHA-256-hashene lagres i databasen. Kapslene bruker HttpOnly, Secure, SameSite=Strict, Path=/ og __Host-prefiks. Innlogging og passordendring har en vedvarende grense på 10 forsøk per IP og 15-minutters tidsvindu. POST krever samme Origin. Utlogging tilbakekaller økten på serveren, og passordendring krever gjeldende passord og tilbakekaller andre økter. Nytt passord må ha minst 12 tegn.
+
+`ADMIN_BOOTSTRAP_HASH` er en hemmelig runtime-variabel i Sites, med JSON-feltene `salt` (32–128 bokstav-/talltegn) og `hash` (64 heksadesimale tegn). Den brukes kun til å opprette admin-kontoen første gang og overskriver aldri et endret passord. Hashen beregnes med `passwordHash` i `worker/auth.js`. Klartekstpassordet skal ikke legges i kildekoden eller hostingmanifestet. Hvis eksisterende arbeidsområder fra tidligere innlogging skal overføres, settes `LEGACY_OWNER_ID` server-side til korrekt tidligere eier-ID. Kopiering skjer ved første admin-lesing uten å slette originalen eller overskrive et allerede opprettet admin-arbeidsområde. Alle med admin-passordet deler samme arbeidsområde.
 
 `GET /api/workspace` henter eller oppretter kontoens arbeidsområde med fiktive eksempelsalg. `PUT /api/workspace` validerer alle data før en atomisk oppdatering. Oppdateringer krever riktig Origin, JSON og en `If-Match`-versjon. Ved samtidige endringer får den gamle versjonen HTTP 409. Siden ber deg hente siste versjon før du lagrer videre, og beholder skjemaet ved mislykket lagring. Bekreftet lagring vises som «Lagret på nett». Ingen prosjektdata skrives til `localStorage` eller IndexedDB.
 
@@ -104,6 +108,7 @@ Maksimalt lagret arbeidsområde er 1 800 000 UTF-8-byte. API-et avviser større 
 index.html / styles.css / app.js   Nettgrensesnitt med sky-API
 core.js                            Delt validering og økonomiberegning
 worker/index.js                    Autentisert API og statiske ressurser
+worker/auth.js                     Passordhash, serverøkter og passordendring
 .openai/hosting.json                Sites-ID og D1-binding
 db/schema.js                       Databaseskjema (Drizzle)
 drizzle/                           Versjonerte SQL-migreringer og metadata
@@ -112,9 +117,9 @@ scripts/dev-server.mjs             Kun for utviklere, aldri i hosted Worker
 tests/                             Økonomi-, import- og API-tester
 ```
 
-Utvikling krever Node.js 24+ og `npm ci`. `npm test` bygger appen og kjører 19 tester med en ekte SQLite-database i minnet. Testene kontrollerer blant annet kontoisolasjon, påloggingskrav, Origin, datavalidering, varig lagring og samtidige oppdateringer. `npm run db:generate` genererer schema-only-migreringer fra Drizzle-skjemaet. Hosted migreringer skal brukes av publiseringsflyten; tabeller opprettes aldri under API-kall.
+Utvikling krever Node.js 24+ og `npm ci`. `npm test` bygger appen og kjører 33 tester med en ekte SQLite-database i minnet. Testene kontrollerer blant annet kontoisolasjon, påloggingskrav, Origin, datavalidering, varig lagring og samtidige oppdateringer. `npm run db:generate` genererer schema-only-migreringer fra Drizzle-skjemaet. Hosted migreringer skal brukes av publiseringsflyten; tabeller opprettes aldri under API-kall.
 
-`npm run build` produserer `dist/server/index.js` med alle nødvendige nettressurser innebygd, samt manifest og migreringer. Ingen utviklingsserver, lokal database eller lokale filer inngår i brukerflyten. `npm run dev` er en valgfri utviklerforhåndsvisning med en separat testidentitet og testdatabase, som ikke publiseres.
+`npm run build` produserer `dist/server/index.js` med alle nødvendige nettressurser innebygd, samt manifest og migreringer. Ingen utviklingsserver, lokal database eller lokale filer inngår i brukerflyten. `npm run dev` er en valgfri utviklerforhåndsvisning med en separat testdatabase og eksplisitt konfigurert testhash i `ADMIN_BOOTSTRAP_HASH`, som ikke publiseres.
 
 Publisering styres av Sites. GitHub-repoet er kildekoden; Sites bruker sin tilknyttede kilderepo og en arkivpakke av nøyaktig samme commit for produksjon. Behold `.openai/hosting.json` sin prosjekt-ID ved senere oppdateringer. Hemmeligheter skal aldri legges i kildekoden.
 

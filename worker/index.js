@@ -1,6 +1,7 @@
 import {SCHEMA_VERSION, validateBackup} from '../core.js';
 import demoSales from '../data/demo-sales.json' with {type:'json'};
 import {assets} from '../.generated/assets.js';
+import {authenticate,handleAuth} from './auth.js';
 
 export const MAX_WORKSPACE_BYTES=1800000;
 const json=(value,status=200,extra={})=>Response.json(value,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...extra}});
@@ -18,8 +19,11 @@ async function readBounded(request,max){
 
 export async function handleApi(request,env){
   const url=new URL(request.url);
-  const userId=request.headers.get('oai-authenticated-user-id');
-  if(!userId)return error('Logg inn med ChatGPT for å åpne arbeidsområdet.',401);
+  if(url.pathname.startsWith('/api/auth/'))return handleAuth(request,env);
+  if(!env.DB)return error('Lagringen er ikke tilgjengelig. Prøv igjen om litt.',503);
+  const user=await authenticate(request,env);
+  if(!user)return error('Logg inn for å åpne arbeidsområdet.',401);
+  const userId=`account:${user.username}`;
   if(url.pathname==='/api/addresses'){
     if(request.method!=='GET')return error('Metoden er ikke tillatt.',405);
     const q=(url.searchParams.get('q')||'').trim();if(q.length<3||q.length>200)return error('Søk med mellom 3 og 200 tegn.',400);
@@ -31,11 +35,14 @@ export async function handleApi(request,env){
   if(!env.DB)return error('Lagringen er ikke tilgjengelig. Prøv igjen om litt.',503);
   if(!['GET','PUT'].includes(request.method))return error('Metoden er ikke tillatt.',405);
   if(request.method==='GET'){
+    if(user.username==='admin'&&env.LEGACY_OWNER_ID){
+      await env.DB.prepare('INSERT OR IGNORE INTO workspaces (owner_id, data, revision, updated_at) SELECT ?, data, revision, updated_at FROM workspaces WHERE owner_id = ?').bind(userId,env.LEGACY_OWNER_ID).run();
+    }
     // Initialiser bare en ny brukers rad. Tabellen opprettes av versjonert migrering.
     const initial=JSON.stringify({schemaVersion:SCHEMA_VERSION,sales:demoSales,projects:[]});
     await env.DB.prepare('INSERT OR IGNORE INTO workspaces (owner_id, data, revision, updated_at) VALUES (?, ?, 0, ?)').bind(userId,initial,new Date().toISOString()).run();
     const row=await env.DB.prepare('SELECT data, revision, updated_at FROM workspaces WHERE owner_id = ?').bind(userId).first();
-    return json({workspace:JSON.parse(row.data),revision:row.revision,updatedAt:row.updated_at,user:{displayName:displayName(request)}});
+    return json({workspace:JSON.parse(row.data),revision:row.revision,updatedAt:row.updated_at,user:{displayName:user.username}});
   }
   // Les identitet fra plattformen; eier-ID aksepteres aldri fra brukerens JSON.
   if(request.headers.get('origin')!==url.origin)return error('Forespørselen må komme fra Kvadrat-siden.',403);
@@ -51,12 +58,6 @@ export async function handleApi(request,env){
   const result=await env.DB.prepare('UPDATE workspaces SET data = ?, revision = revision + 1, updated_at = ? WHERE owner_id = ? AND revision = ?').bind(encoded,now,userId,revision).run();
   if(result.meta.changes!==1)return error('Arbeidsområdet ble endret i en annen fane eller på en annen enhet. Last inn siste versjon før du prøver igjen.',409);
   return json({revision:revision+1,updatedAt:now});
-}
-
-function displayName(request){
-  const name=request.headers.get('oai-authenticated-user-full-name');
-  if(name){try{return request.headers.get('oai-authenticated-user-full-name-encoding')==='percent-encoded-utf-8'?decodeURIComponent(name):name;}catch{}}
-  return request.headers.get('oai-authenticated-user-email')||'Mitt arbeidsområde';
 }
 
 export default {

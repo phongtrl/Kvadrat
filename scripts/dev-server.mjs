@@ -19,13 +19,11 @@ const port=Number(arg('--port')||process.env.PORT||4173),host=arg('--host')||'12
 http.createServer(async(req,res)=>{
  try{
   const headers=new Headers();for(const [key,value] of Object.entries(req.headers)){if(value&&typeof value==='string')headers.set(key,value);}
-  // A fixed development identity exists only inside this non-production adapter.
-  headers.set('oai-authenticated-user-id','development-preview');headers.set('oai-authenticated-user-email','preview@kvadrat.test');
   const proto=headers.get('x-forwarded-proto')||'http';
   const origin=`${proto}://${headers.get('x-forwarded-host')||headers.get('host')}`;
   if(headers.get('origin'))headers.set('origin',origin);
   const chunks=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>1800000){res.writeHead(413);res.end('Too large');return;}chunks.push(chunk);}
   const request=new Request(new URL(req.url,origin),{method:req.method,headers,body:['GET','HEAD'].includes(req.method)?undefined:Buffer.concat(chunks)});
-  const response=await worker.fetch(request,{DB});res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));
+  const response=await worker.fetch(request,{DB,ADMIN_BOOTSTRAP_HASH:process.env.ADMIN_BOOTSTRAP_HASH});res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));
  }catch(error){console.error(error.message);res.writeHead(500);res.end('Development server error');}
 }).listen(port,host,()=>console.log(`Kvadrat development preview: http://${host}:${port}`));
