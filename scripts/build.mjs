@@ -7,6 +7,8 @@ const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8'
 const assets={};for(const file of files){const binary=file.endsWith('.png');const data=await readFile(path.join(root,file));assets['/'+file]={type:types[path.extname(file)]||'text/plain; charset=utf-8',body:data.toString(binary?'base64':'utf8'),base64:binary};}
 await mkdir(path.join(root,'.generated'),{recursive:true});await writeFile(path.join(root,'.generated/assets.js'),'export const assets = '+JSON.stringify(assets)+';\n');
 let worker=await readFile(path.join(root,'worker/index.js'),'utf8');
+const auth=(await readFile(path.join(root,'worker/auth.js'),'utf8')).replace(/^export /gm,'');
+worker=worker.replace(/^import .*from '\.\/auth\.js';\n/m,auth+'\n');
 const core=(await readFile(path.join(root,'core.js'),'utf8')).replace(/^export /gm,'');
 worker=worker.replace(/^import .*from '\.\.\/core\.js';\n/m,core+'\n').replace(/^import demoSales .*;\n/m,'const demoSales='+await readFile(path.join(root,'data/demo-sales.json'),'utf8')+';\n').replace(/^import \{assets\} .*;\n/m,'const assets='+JSON.stringify(assets)+';\n');
 await rm(path.join(root,'dist'),{recursive:true,force:true});await mkdir(path.join(root,'dist/server'),{recursive:true});await mkdir(path.join(root,'dist/.openai'),{recursive:true});

@@ -45,7 +45,7 @@ async function commit(next){
   try{
     const response=await fetch('/api/workspace',{method:'PUT',credentials:'same-origin',signal:AbortSignal.timeout(20000),headers:{'Content-Type':'application/json','If-Match':String(revision)},body:JSON.stringify(next)});
     const result=await response.json();
-    if(!response.ok){if(response.status===409)needsReload=true;throw new Error(result.error||'Lagring mislyktes.');}
+    if(!response.ok){if(response.status===409)needsReload=true;if(response.status===401)showLogin();throw new Error(result.error||'Lagring mislyktes.');}
     revision=result.revision;state=next;syncStatus('Lagret på nett');return true;
   }catch(e){syncStatus(needsReload?'Ny versjon tilgjengelig':'Ikke lagret',true);toast(`${e.message} Endringene er ikke bekreftet lagret.`,true);return false;}
   finally{saving=false;}
@@ -56,12 +56,12 @@ async function loadWorkspace(background=false){
   try{
     const response=await fetch('/api/workspace',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000)});
     if(!response.headers.get('content-type')?.includes('application/json'))throw new Error('Logg inn for å åpne arbeidsområdet.');
-    const result=await response.json();if(!response.ok)throw new Error(result.error||'Arbeidsområdet kunne ikke lastes.');
+    const result=await response.json();if(response.status===401){showLogin();return;}if(!response.ok)throw new Error(result.error||'Arbeidsområdet kunne ikke lastes.');
     if(saving||$('#project-dialog').open||$('#sale-dialog').open||$('#listing-dialog').open||$('#listing-import-dialog').open)return;
     state=validateBackup(result.workspace);revision=result.revision;ready=true;needsReload=false;
-    $('#cloud-error').hidden=true;$('main').inert=false;syncStatus('Lagret på nett');
+    $('#cloud-error').hidden=true;$('#login-screen').hidden=true;document.body.classList.remove('signed-out');$('main').inert=false;syncStatus('Lagret på nett');route();
     $('#account-name').textContent=result.user.displayName;renderAll();
-  }catch(e){syncStatus('Frakoblet',true);if(!background){$('#cloud-error-message').textContent=e.message;$('#cloud-error').hidden=false;}}
+  }catch(e){syncStatus('Frakoblet',true);if(document.body.classList.contains('signed-out')){$('#login-error').textContent='Kunne ikke koble til serveren. Prøv igjen.';$('#login-error').hidden=false;}if(!background){$('#cloud-error-message').textContent=e.message;$('#cloud-error').hidden=false;}}
   finally{if(ready)$('main').inert=false;}
 }
 
@@ -227,6 +227,29 @@ $('#reload-workspace').onclick=async()=>{
 };
 $('#retry-cloud').onclick=()=>loadWorkspace();
 window.addEventListener('focus',()=>{if(ready&&!saving&&!needsReload&&!$('#project-dialog').open&&!$('#sale-dialog').open&&!$('#listing-dialog').open&&!$('#listing-import-dialog').open)loadWorkspace(true);});
+
+function showLogin(){
+  ready=false;revision=null;needsReload=false;$('main').inert=true;document.body.classList.add('signed-out');$('#login-screen').hidden=false;
+  $$('dialog[open]').forEach(d=>d.close());state={schemaVersion:SCHEMA_VERSION,sales:[],projects:[],listings:[]};editingExpenses=[];editingTasks=[];
+  $$('dialog form').forEach(form=>form.reset());
+  $('#login-form').elements.password.value='';renderAll();
+}
+async function authPost(path,body={}){
+  const response=await fetch('/api/auth/'+path,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(20000)});
+  const result=await response.json();if(!response.ok)throw new Error(result.error||'Forespørselen feilet.');return result;
+}
+$('#login-form').addEventListener('submit',async e=>{e.preventDefault();$('#login-submit').disabled=true;$('#login-error').hidden=true;try{await authPost('login',Object.fromEntries(new FormData(e.target)));e.target.elements.password.value='';await loadWorkspace();}catch(error){$('#login-error').textContent=error.message;$('#login-error').hidden=false;}finally{$('#login-submit').disabled=false;}});
+$('#logout-button').onclick=async()=>{
+  if(saving)return;
+  if($$('dialog[open]').length&&!await confirmAction('Logge ut?','Ulagrede endringer i skjemaet forkastes når du logger ut.'))return;
+  try{await authPost('logout');showLogin();$('#login-error').hidden=true;}catch(error){toast(error.message,true);}
+};
+$('#change-password').onclick=()=>{$('#password-form').reset();$('#password-error').hidden=true;$('#password-dialog').showModal();};
+$('#close-password').onclick=()=>{$('#password-dialog').close();$('#password-form').reset();};
+$('#password-form').addEventListener('submit',async e=>{e.preventDefault();const values=Object.fromEntries(new FormData(e.target));$('#password-error').hidden=true;
+  if(values.newPassword!==values.confirmPassword){$('#password-error').textContent='De nye passordene er ikke like.';$('#password-error').hidden=false;return;}
+  $('#password-submit').disabled=true;try{await authPost('password',values);$('#password-dialog').close();e.target.reset();toast('Passordet er endret. Andre økter er logget ut.');}catch(error){$('#password-error').textContent=error.message;$('#password-error').hidden=false;}finally{$('#password-submit').disabled=false;}
+});
 
 async function init(){
   $('main').inert=true;
