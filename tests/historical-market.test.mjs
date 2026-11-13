@@ -20,3 +20,23 @@ test('Trøndelag includes county and every municipality without imputing suppres
   for(const r of rows){assert.ok(r.price===null||Number.isFinite(r.price));assert.ok(r.count===null||Number.isInteger(r.count));}
  }
 });
+test('search priorities exclude sparse or missing observations and never rank county as municipality',async()=>{
+ const {marketOpportunities}=await import('../historical-market.js');
+ for(const type of ['00','01','02','03']){
+ const rows=marketOpportunities(data,type);assert.equal(rows.length,38);assert.ok(rows.every(r=>r.code!=='50'));
+ const valid=rows.filter(r=>r.eligible);assert.ok(valid.length>0);
+ for(const row of valid){assert.ok(row.count>=50);assert.ok(row.price>0);assert.ok(row.score>0&&row.score<=100);}
+ assert.ok(valid.every((r,i)=>i===0||r.score<=valid[i-1].score));
+ for(const row of rows.filter(r=>!r.eligible))assert.equal(row.score,null);
+ }
+ const empty=structuredClone(data);empty.value=empty.value.map(()=>null);
+ assert.equal(marketOpportunities(empty).filter(r=>r.eligible).length,0);
+});
+test('illustrative bid cap accounts for stamp duty, buffer, target profit and downside',async()=>{
+ const {purchaseScenario}=await import('../market-advice.js');
+ const input={resale:4000000,renovation:500000,other:200000,profit:300000,stampRate:.025};
+ const result=purchaseScenario(input);assert.ok(Math.abs(result.bid-2925000/1.025)<.001);
+ assert.ok(Math.abs(result.baseProfit-300000)<.001);assert.ok(Math.abs(result.stressProfit-(-215000))<.001);
+ assert.equal(purchaseScenario({...input,resale:100000}).feasible,false);
+ assert.throws(()=>purchaseScenario({...input,resale:NaN}));
+});

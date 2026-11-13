@@ -17,3 +17,19 @@ ikke geokodede enkeltsalg. Data lagres som publisert, uten beregning av
 fiktive adresser eller fordeling på bydeler. Kvartalsprisene skal ikke tolkes
 som prisindeks. Nye uttrekk krever også oppdatering av periodetekst og
 kildedato i historical-market.js.
+
+## Søkeprioritet
+
+Markedsanalysen rangerer kommuner med minst 50 omsetninger over fire kvartaler,
+publiserte positive antall i hvert kvartal og positiv publisert pris i siste
+kvartal. Poeng = 60 × ln(1 + antall) / ln(1 + høyeste antall) +
+40 × laveste pris / kommunens pris. Sammenligningen gjelder valgt boligtype.
+Dette er en egen modell for å prioritere videre undersøkelser, ikke et SSB-mål
+eller et estimat på lønnsomhet. Null/manglende verdier erstattes ikke med nullpris.
+
+Budrammekalkylen er en separat illustrasjon for selveier uten fellesgjeld,
+med 15 % oppussingsbuffer, 2,5 % dokumentavgift (grunnlag antatt lik kjøpspris),
+brukerens øvrige kostnader og ønsket fortjeneste før skatt. SSB-pris × areal
+er kun et redigerbart startanslag, uten noen premie for oppussing.
+Stresscenarioet reduserer salgspris med 10 % og øker oppussing inklusive
+buffer med 20 %, mens andre kostnader holdes faste.
