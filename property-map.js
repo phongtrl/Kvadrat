@@ -2,11 +2,11 @@ import {apiFetch} from './api-client.js';
 import {validateProperty,calculate} from './core.js';
 export function propertyMapRows(state,stage=''){
  const properties=(state.properties||[]).map(p=>({...p,key:'property:'+p.id,kind:'property',title:p.address}));
- const projects=(state.projects||[]).map(p=>({...p,key:'project:'+p.id,kind:'project',title:p.name,stage:p.status==='Vurderes'?'potensiell':p.status==='Solgt'?'historisk':'aktiv'}));
+ const projects=(state.projects||[]).map(p=>({...p,key:'project:'+p.id,kind:'project',title:p.address,stage:p.status==='Vurderes'?'potensiell':p.status==='Solgt'?'historisk':'aktiv'}));
  return [...projects,...properties].filter(p=>!stage||p.stage===stage);
 }
 export function createPropertyMap({getState,commit,toast,escape,openProject}){
- const $=s=>document.querySelector(s), labels={potensiell:'Potensiell',aktiv:'Aktiv oppussing',historisk:'Historisk / ferdig oppusset'}, colors={potensiell:'#284f3f',aktiv:'#be722e',historisk:'#356aa0'};
+ const $=s=>document.querySelector(s), labels={potensiell:'Potensiell',aktiv:'Aktiv oppussing',historisk:'Historisk / ferdig oppusset'};
  let map,layers,editing=null;const markerRefs=new Map();
  const rows=()=>propertyMapRows(getState(),$('#property-filter').value);
  const open=p=>p.kind==='project'?openProject(p.id):edit(p);
@@ -18,9 +18,9 @@ export function createPropertyMap({getState,commit,toast,escape,openProject}){
    layers.clearLayers();markerRefs.clear();const groups=new Map();
    for(const p of list){const key=`${p.lat},${p.lng}`;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(p);}
    for(const group of groups.values()){
-    const p=group[0],marker=L.circleMarker([p.lat,p.lng],{radius:group.length>1?13:p.kind==='project'?11:8,weight:p.kind==='project'?3:2,color:colors[p.stage],fillColor:colors[p.stage],fillOpacity:.85}).addTo(layers);
+    const p=group[0],marker=L.marker([p.lat,p.lng],{icon:L.divIcon({className:'property-address-icon',html:`<div class="price-marker property-address-marker ${p.kind==='project'?'project-marker':''} stage-${p.stage}">${escape(p.address)}${group.length>1?` <span class="property-marker-count">${group.length}</span>`:''}</div>`,iconSize:[200,32],iconAnchor:[100,36],popupAnchor:[0,-36]}),title:p.address,keyboard:true}).addTo(layers);
     const popup=document.createElement('div');
-    for(const row of group){markerRefs.set(row.key,marker);const title=document.createElement('strong'),button=document.createElement('button');title.textContent=row.title;button.textContent=row.kind==='project'?'Åpne prosjekt':'Rediger bolig';button.type='button';button.onclick=()=>open(row);popup.append(title,document.createElement('br'),document.createTextNode(row.kind==='project'?`Prosjekt · ${row.status} · ${row.address}`:`Boligpunkt · ${labels[row.stage]}`),document.createElement('br'));if(row.kind==='project'){const result=calculate(row),details=document.createElement('p');const money=value=>Number.isFinite(value)?new Intl.NumberFormat('nb-NO',{style:'currency',currency:'NOK',maximumFractionDigits:0}).format(value):'Ikke angitt';details.textContent=`${row.area||'–'} m² · Kjøp: ${money(row.purchase)} · Forventet salg: ${money(row.resale)} · Estimert fortjeneste før skatt: ${money(result.profit)}`;popup.append(details);}popup.append(button,document.createElement('hr'));}
+    for(const row of group){markerRefs.set(row.key,marker);const title=document.createElement('strong'),button=document.createElement('button');title.textContent=row.title;button.textContent=row.kind==='project'?'Åpne prosjekt':'Rediger bolig';button.type='button';button.onclick=()=>open(row);popup.append(title,document.createElement('br'),document.createTextNode(row.kind==='project'?`Prosjekt: ${row.name} · ${row.status}`:`Boligpunkt · ${labels[row.stage]}`),document.createElement('br'));if(row.kind==='project'){const result=calculate(row),details=document.createElement('p');const money=value=>Number.isFinite(value)?new Intl.NumberFormat('nb-NO',{style:'currency',currency:'NOK',maximumFractionDigits:0}).format(value):'Ikke angitt';details.textContent=`${row.area||'–'} m² · Kjøp: ${money(row.purchase)} · Forventet salg: ${money(row.resale)} · Estimert fortjeneste før skatt: ${money(result.profit)}`;popup.append(details);}popup.append(button,document.createElement('hr'));}
     marker.bindPopup(popup,{maxWidth:340});
    }
   }

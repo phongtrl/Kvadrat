@@ -28,11 +28,12 @@ test('property map fits project and property positions and keeps overlapping rec
  const node=()=>({children:[],append(...items){this.children.push(...items);}});
  let fitted,opened;const markers=[];
  const map={setView(){return this;},invalidateSize(){},on(){},fitBounds(points){fitted=points;}};
- const L={map:()=>map,layerGroup:()=>({addTo(){return this;},clearLayers(){markers.length=0;}}),tileLayer:()=>({addTo(){return this;},on(){return this;}}),circleMarker:(point)=>{const marker={point,addTo(){markers.push(this);return this;},bindPopup(popup){this.popup=popup;return this;}};return marker;}};
+ const L={map:()=>map,layerGroup:()=>({addTo(){return this;},clearLayers(){markers.length=0;}}),tileLayer:()=>({addTo(){return this;},on(){return this;}}),divIcon:options=>options,marker:(point,options)=>{const marker={point,options,addTo(){markers.push(this);return this;},bindPopup(popup){this.popup=popup;return this;}};return marker;}};
  Object.assign(globalThis,{window:{L},L,document:{querySelector:element,createElement:node,createTextNode:text=>({text})}});
  const state={projects:[{id:'p1',name:'Prosjekt',address:'Adresse',status:'Kjøpt',lat:63.4,lng:10.4}],properties:[{id:'b1',address:'Boligpunkt',stage:'potensiell',lat:63.4,lng:10.4},{id:'b2',address:'Steinkjer',stage:'historisk',lat:64.015,lng:11.495}]};
  const ui=createPropertyMap({getState:()=>state,commit(){},toast(){},escape:s=>s,openProject:id=>opened=id});ui.activate();
  assert.equal(markers.length,2);assert.deepEqual(fitted,[[63.4,10.4],[63.4,10.4],[64.015,11.495]]);
+ assert.match(markers[0].options.icon.html,/price-marker.*Adresse/);assert.equal(markers[0].options.title,'Adresse');assert.equal(markers[0].options.keyboard,true);assert.equal(markers[0].popup.children[0].textContent,'Adresse');
  assert.ok(markers[0].popup.children.some(n=>n.textContent?.includes('Estimert fortjeneste før skatt')));
  const actions=markers[0].popup.children.filter(n=>n.type==='button');assert.equal(actions.length,2);actions[0].onclick();assert.equal(opened,'p1');
  element('#property-filter').value='historisk';ui.render();assert.equal(markers.length,1);assert.deepEqual(markers[0].point,[64.015,11.495]);
