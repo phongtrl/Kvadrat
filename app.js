@@ -1,3 +1,4 @@
+import {createProfitPlanner} from './profit-planner.js';
 import {createPropertyMap} from './property-map.js';
 import {loadHistoricalMarket} from './historical-market.js';
 import {apiFetch,setApiToken,SESSION_STORAGE_KEY} from './api-client.js';
@@ -40,7 +41,7 @@ renderIcons();
 
 let state={schemaVersion:SCHEMA_VERSION,sales:[],projects:[]}, demoSales=[],filtered=[],map,markerGroup,addressMarker,selectedId=null,currentPage='annonser',editingExpenses=[],editingTasks=[],revision=null,saving=false,ready=false,needsReload=false;
 let authVersion=0;
-let listingUI,propertyUI;
+let listingUI,propertyUI,profitPlanner;
 let toastTimer;
 function toast(message,error=false){clearTimeout(toastTimer);$('#toast').textContent=message;$('#toast').classList.toggle('error',error);$('#toast').hidden=false;toastTimer=setTimeout(()=>$('#toast').hidden=true,5500);}
 function syncStatus(message,problem=false){$('.local-status').textContent=message;$('.local-status').classList.toggle('sync-problem',problem);}
@@ -144,6 +145,7 @@ function renderProjects(){
   $('#project-cards').innerHTML=state.projects.map(p=>{const c=calculate(p),done=p.tasks.filter(t=>t.done).length;return `<article class="project-card"><div class="project-card-top"><span>${icon('building')}</span><span class="pill ${p.status==='Solgt'?'green':'warm'}">${escape(p.status)}</span></div><div class="project-card-content"><h2>${escape(p.name)}</h2><p>${escape(p.address)} · ${num(p.area)} m²</p><div class="project-card-value"><small>Estimert fortjeneste før skatt</small><strong class="${c.profit<0?'negative':'positive'}">${kr(c.profit)}</strong></div><div class="insight-row"><span>Avkastning på egenkapital</span><strong>${pct(c.equityRoi)}</strong></div><div class="insight-row"><span>Oppussing, faktisk / ramme</span><strong>${num(c.actual/1000)} / ${num(c.renovationBudget/1000)} t.kr</strong></div><div class="insight-row"><span>Oppgaver fullført</span><strong>${done} av ${p.tasks.length}</strong></div><button class="button light" style="margin-top:18px" data-project="${escape(p.id)}">Åpne prosjekt ${icon('arrow')}</button></div></article>`;}).join('');
 }
 function renderAnalysis(){
+  profitPlanner?.render();
   const grouped=[...new Set(filtered.map(s=>s.district))].map(name=>{const rows=filtered.filter(s=>s.district===name);return{name,rows,price:median(rows.map(s=>s.price/s.area))};}).sort((a,b)=>b.price-a.price);
   const max=Math.max(1,...grouped.map(g=>g.price));const months=monthlyGroups(filtered);const countMax=Math.max(1,...months.map(g=>g.sales.length));
   const demo=filtered.filter(s=>s.demo).length;
@@ -269,4 +271,5 @@ async function init(){
 $('#login-form').dataset.ready='true';$('#login-submit').disabled=false;
 listingUI=createListingOverview({getState:()=>state,commit,openProject,toast,escape,kr,num,stat});
 propertyUI=createPropertyMap({getState:()=>state,commit,toast,escape,openProject});
+profitPlanner=createProfitPlanner({getState:()=>state,openProject});
 init();

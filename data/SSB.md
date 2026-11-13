@@ -33,3 +33,22 @@ brukerens øvrige kostnader og ønsket fortjeneste før skatt. SSB-pris × areal
 er kun et redigerbart startanslag, uten noen premie for oppussing.
 Stresscenarioet reduserer salgspris med 10 % og øker oppussing inklusive
 buffer med 20 %, mens andre kostnader holdes faste.
+
+## Prisindeks og scenarioverktøy
+
+`ssb-price-index.json` er JSON-stat2 fra SSB 07221, hentet 13.11.2026.
+`ssb-index-query.json` gjengir spørringen: Trondheim (004) og Trøndelag uten
+Trondheim (010), alle boligtyper, sesongjustert indeks, 2016K1–2026K3.
+Indeksnivå er ikke salgspris. Den enkle modellen i profit-planner.js sammenligner
+halvert log-lineær trend fra 12 kvartaler (årlig begrensning ±10 %) med flatt
+nivå i åtte rullerende tester med fire kvartalers horisont. Testene overlapper
+og brukes også til modellvalg; feilene er ikke en uavhengig kvalitetsgaranti.
+Scenarioene ±5 % rundt modellnivået er antakelser, ikke sannsynlighetsintervaller.
+Det gjøres ingen prognose hvis serien er for kort, har hull eller mangler verdier.
+
+Prosjektvurderinger bruker den eksisterende calculate-modellen. Standardstress:
+10 % lavere salg, 20 % høyere samlet oppussingsanslag inklusive buffer, tre
+måneders ekstra eiertid og to prosentpoeng høyere rente. Justerbare antakelser
+endrer ikke lagrede prosjektdata. Budgrensen løses numerisk for ønsket fortjeneste,
+med avgiftsgrunnlag lik kjøpspris for selveier. Eksisterende modellforenklinger,
+inkludert enkel rente, uendret fellesgjeld og beregning før skatt, gjelder fortsatt.
