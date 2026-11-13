@@ -19,9 +19,26 @@ export function createPropertyMap({getState,commit,toast,escape,openProject}){
    for(const p of list){const key=`${p.lat},${p.lng}`;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(p);}
    for(const group of groups.values()){
     const p=group[0],marker=L.marker([p.lat,p.lng],{icon:L.divIcon({className:'property-address-icon',html:`<div class="price-marker property-address-marker ${p.kind==='project'?'project-marker':''} stage-${p.stage}">${escape(p.address)}${group.length>1?` <span class="property-marker-count">${group.length}</span>`:''}</div>`,iconSize:[200,32],iconAnchor:[100,36],popupAnchor:[0,-36]}),title:p.address,keyboard:true}).addTo(layers);
-    const popup=document.createElement('div');
-    for(const row of group){markerRefs.set(row.key,marker);const title=document.createElement('strong'),button=document.createElement('button');title.textContent=row.title;button.textContent=row.kind==='project'?'Åpne prosjekt':'Rediger bolig';button.type='button';button.onclick=()=>open(row);popup.append(title,document.createElement('br'),document.createTextNode(row.kind==='project'?`Prosjekt: ${row.name} · ${row.status}`:`Boligpunkt · ${labels[row.stage]}`),document.createElement('br'));if(row.kind==='project'){const result=calculate(row),details=document.createElement('p');const money=value=>Number.isFinite(value)?new Intl.NumberFormat('nb-NO',{style:'currency',currency:'NOK',maximumFractionDigits:0}).format(value):'Ikke angitt';details.textContent=`${row.area||'–'} m² · Kjøp: ${money(row.purchase)} · Forventet salg: ${money(row.resale)} · Estimert fortjeneste før skatt: ${money(result.profit)}`;popup.append(details);}popup.append(button,document.createElement('hr'));}
-    marker.bindPopup(popup,{maxWidth:340});
+    const popup=document.createElement('div');popup.className='property-popup-stack';
+    const money=value=>Number.isFinite(value)?new Intl.NumberFormat('nb-NO',{style:'currency',currency:'NOK',maximumFractionDigits:0}).format(value):'Ikke angitt';
+    for(const row of group){
+     markerRefs.set(row.key,marker);const card=document.createElement('article');card.className='property-popup-card';
+     const header=document.createElement('div');header.className='property-popup-heading';
+     const type=document.createElement('span');type.className='property-popup-type';type.textContent=row.kind==='project'?'MITT PROSJEKT':'BOLIGPUNKT';
+     const badge=document.createElement('span');badge.className='property-popup-badge stage-'+row.stage;badge.textContent=row.kind==='project'?row.status:labels[row.stage];header.append(type,badge);
+     const title=document.createElement('h3');title.className='property-popup-address';title.textContent=row.address;
+     const subtitle=document.createElement('p');subtitle.className='property-popup-subtitle';subtitle.textContent=row.kind==='project'?`${row.name} · ${row.area||'–'} m² · ${row.ownership==='borettslag'?'Borettslag / aksje':'Selveier'}`:row.completedAt?'Ferdig oppusset '+row.completedAt:'Registrert i ditt boligkart';
+     card.append(header,title,subtitle);
+     if(row.kind==='project'){
+      const result=calculate(row),metrics=document.createElement('div');metrics.className='property-popup-metrics';
+      for(const [label,value]of [['Kjøpesum',row.purchase],['Forventet salg',row.resale]]){const cell=document.createElement('div'),key=document.createElement('small'),number=document.createElement('strong');key.textContent=label;number.textContent=money(value);cell.append(key,number);metrics.append(cell);}
+      const profit=document.createElement('div');profit.className='property-popup-profit '+(result.profit<0?'is-negative':'is-positive');
+      const profitLabel=document.createElement('small'),profitValue=document.createElement('strong'),profitNote=document.createElement('span');profitLabel.textContent='Estimert fortjeneste før skatt';profitValue.textContent=money(result.profit);profitNote.textContent='Basert på din prosjektkalkyle';profit.append(profitLabel,profitValue,profitNote);card.append(metrics,profit);
+     }
+     if(row.notes){const notes=document.createElement('p');notes.className='property-popup-notes';notes.textContent=row.notes.length>180?row.notes.slice(0,177)+'…':row.notes;card.append(notes);}
+     const button=document.createElement('button');button.type='button';button.className='button primary property-popup-action';button.textContent=row.kind==='project'?'Åpne prosjektdetaljer →':'Rediger boligpunkt →';button.onclick=()=>open(row);card.append(button);if(row.kind==='project'){const locationButton=document.createElement('button');locationButton.type='button';locationButton.className='text-button property-popup-location';locationButton.textContent='Endre plassering';locationButton.onclick=()=>{open(row);document.querySelector('#project-location-section')?.scrollIntoView?.({behavior:'smooth',block:'start'});};card.append(locationButton);}popup.append(card);
+    }
+    marker.bindPopup(popup,{className:'kvadrat-property-popup',maxWidth:360,minWidth:260,maxHeight:430});
    }
   }
  }

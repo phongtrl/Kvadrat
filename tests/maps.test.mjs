@@ -33,8 +33,8 @@ test('property map fits project and property positions and keeps overlapping rec
  const state={projects:[{id:'p1',name:'Prosjekt',address:'Adresse',status:'Kjøpt',lat:63.4,lng:10.4}],properties:[{id:'b1',address:'Boligpunkt',stage:'potensiell',lat:63.4,lng:10.4},{id:'b2',address:'Steinkjer',stage:'historisk',lat:64.015,lng:11.495}]};
  const ui=createPropertyMap({getState:()=>state,commit(){},toast(){},escape:s=>s,openProject:id=>opened=id});ui.activate();
  assert.equal(markers.length,2);assert.deepEqual(fitted,[[63.4,10.4],[63.4,10.4],[64.015,11.495]]);
- assert.match(markers[0].options.icon.html,/price-marker.*Adresse/);assert.equal(markers[0].options.title,'Adresse');assert.equal(markers[0].options.keyboard,true);assert.equal(markers[0].popup.children[0].textContent,'Adresse');
- assert.ok(markers[0].popup.children.some(n=>n.textContent?.includes('Estimert fortjeneste før skatt')));
- const actions=markers[0].popup.children.filter(n=>n.type==='button');assert.equal(actions.length,2);actions[0].onclick();assert.equal(opened,'p1');
+ assert.match(markers[0].options.icon.html,/price-marker.*Adresse/);assert.equal(markers[0].options.title,'Adresse');assert.equal(markers[0].options.keyboard,true);const flatten=node=>[node,...(node.children||[]).flatMap(flatten)];const popupNodes=flatten(markers[0].popup);assert.ok(popupNodes.some(n=>n.textContent==='Adresse'));assert.ok(popupNodes.some(n=>n.className==='property-popup-address'));
+ assert.ok(popupNodes.some(n=>n.textContent?.includes('Estimert fortjeneste før skatt')));
+ const actions=popupNodes.filter(n=>n.type==='button');assert.equal(actions.length,3);actions[0].onclick();assert.equal(opened,'p1');
  element('#property-filter').value='historisk';ui.render();assert.equal(markers.length,1);assert.deepEqual(markers[0].point,[64.015,11.495]);
 });

@@ -92,7 +92,7 @@ export function validateProject(p) {
   clean.status=p.status;clean.ownership=p.ownership;
   for(const field of NUMERIC_FIELDS) {
     let min=0,max=1e9;
-    if (field==='lat'){min=63.1;max=63.6;} else if(field==='lng'){min=9.8;max=10.8;}
+    if (field==='lat'){min=62;max=66;} else if(field==='lng'){min=8;max=15;}
     else if(['contingency','interest'].includes(field))max=100;
     else if(field==='months'){min=1;max=120;}
     else if(field==='area'){min=1;max=10000;}

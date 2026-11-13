@@ -1,3 +1,4 @@
+import {createProjectLocation} from './project-location.js';
 import {createProfitPlanner} from './profit-planner.js';
 import {createPropertyMap} from './property-map.js';
 import {loadHistoricalMarket} from './historical-market.js';
@@ -41,7 +42,7 @@ renderIcons();
 
 let state={schemaVersion:SCHEMA_VERSION,sales:[],projects:[]}, demoSales=[],filtered=[],map,markerGroup,addressMarker,selectedId=null,currentPage='annonser',editingExpenses=[],editingTasks=[],revision=null,saving=false,ready=false,needsReload=false;
 let authVersion=0;
-let listingUI,propertyUI,profitPlanner;
+let listingUI,propertyUI,profitPlanner,projectLocation;
 let toastTimer;
 function toast(message,error=false){clearTimeout(toastTimer);$('#toast').textContent=message;$('#toast').classList.toggle('error',error);$('#toast').hidden=false;toastTimer=setTimeout(()=>$('#toast').hidden=true,5500);}
 function syncStatus(message,problem=false){$('.local-status').textContent=message;$('.local-status').classList.toggle('sync-problem',problem);}
@@ -164,7 +165,7 @@ function openProject(id,prefill={}){
   editingExpenses=structuredClone(p?.expenses||[]);editingTasks=structuredClone(p?.tasks||[]);
   $('#project-dialog-title').textContent=p?p.name:'En ny mulighet.';$('#project-tracking').hidden=false;$('#delete-project').hidden=!p;
   $('#expense-description').value='';$('#expense-amount').value='';$('#task-description').value='';
-  renderTracking();renderLiveCalculation();$('#project-dialog').showModal();
+  renderTracking();renderLiveCalculation();$('#project-dialog').showModal();projectLocation?.activate();
 }
 function renderLiveCalculation(){const p=formProject();if(NUMERIC_FIELDS.some(f=>!Number.isFinite(p[f])))return;const c=calculate(p);$('#live-calculation').innerHTML=`<div><small>Samlet investering</small><strong>${kr(c.total)}</strong></div><div><small>Fortjeneste før skatt</small><strong class="${c.profit<0?'negative':'positive'}">${kr(c.profit)}</strong></div><div><small>Avkastning på egenkapital</small><strong class="${c.profit<0?'negative':'positive'}">${pct(c.equityRoi)}</strong></div><p>Dokumentavgift ${kr(c.stamp)} · oppussing inkl. buffer / overskridelser ${kr(c.renovation)} · løpende utgifter ${kr(c.holding)} · renter ${kr(c.financing)}.<br>Lånebehov før renter ${kr(c.loan)} · avkastning på samlet investering ${pct(c.roi)} · kjøpesum inkl. fellesgjeld ${kr(c.exposure)}.<br>Renter er forenklet beregnet med fullt lånebehov fra start, inkludert salgsomkostninger og løpende utgifter. Egenkapital utover kapitalbehov reduserer ikke kostnadene ytterligere.</p>`;}
 function renderTracking(){
@@ -195,7 +196,7 @@ $('#address-search').addEventListener('keydown',e=>{if(e.key==='Escape')$('#addr
 $$('[data-action="new-project"]').forEach(b=>b.onclick=()=>openProject());
 $$('.close-dialog').forEach(b=>b.onclick=()=>$('#project-dialog').close());
 $('#project-form').addEventListener('input',renderLiveCalculation);
-$('#project-form').addEventListener('submit',async e=>{e.preventDefault();try{const p=validateProject(formProject());const existing=state.projects.some(x=>x.id===p.id);const projects=existing?state.projects.map(x=>x.id===p.id?p:x):[...state.projects,p];if(!await commit({...state,projects}))return;$('#project-dialog').close();renderAll();location.hash='prosjekter';toast('Prosjektet er lagret.');}catch(err){toast(err.message,true);}});
+$('#project-form').addEventListener('submit',async e=>{e.preventDefault();try{const p=validateProject(formProject());const existing=state.projects.some(x=>x.id===p.id);const projects=existing?state.projects.map(x=>x.id===p.id?p:x):[...state.projects,p];if(!await commit({...state,projects}))return;$('#project-dialog').close();renderAll();if(currentPage==='boligkart')propertyUI?.activate();else location.hash='prosjekter';toast('Prosjektet er lagret.');}catch(err){toast(err.message,true);}});
 $('#delete-project').onclick=async()=>{const id=$('#project-id').value;if(!await confirmAction('Slette prosjektet?','Prosjektet, kostnader og oppgaver slettes fra arbeidsområdet på nett. Last ned en sikkerhetskopi først hvis du vil beholde dem.'))return;if(await commit({...state,projects:state.projects.filter(p=>p.id!==id)})){$('#project-dialog').close();renderAll();toast('Prosjektet er slettet.');}};
 $('#add-expense').onclick=()=>{const description=$('#expense-description').value.trim(),amount=Number($('#expense-amount').value);if(!description||!Number.isFinite(amount)||amount<=0||amount>1e9){toast('Skriv en beskrivelse og et gyldig kostnadsbeløp.',true);return;}if(editingExpenses.length>=1000){toast('Maks 1 000 kostnader per prosjekt.',true);return;}editingExpenses.push({id:crypto.randomUUID(),description,amount});$('#expense-description').value='';$('#expense-amount').value='';renderTracking();renderLiveCalculation();};
 $('#add-task').onclick=()=>{const description=$('#task-description').value.trim();if(!description){$('#task-description').focus();return;}if(editingTasks.length>=1000){toast('Maks 1 000 oppgaver per prosjekt.',true);return;}editingTasks.push({id:crypto.randomUUID(),description,done:false});$('#task-description').value='';renderTracking();};
@@ -272,4 +273,5 @@ $('#login-form').dataset.ready='true';$('#login-submit').disabled=false;
 listingUI=createListingOverview({getState:()=>state,commit,openProject,toast,escape,kr,num,stat});
 propertyUI=createPropertyMap({getState:()=>state,commit,toast,escape,openProject});
 profitPlanner=createProfitPlanner({getState:()=>state,openProject});
+projectLocation=createProjectLocation();
 init();
