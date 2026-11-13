@@ -44,3 +44,32 @@ test('GitHub frontend can log in, read and save cloud data, and revoke its beare
 test('unknown origins cannot read a session token or use data endpoints',async()=>{
  const env=database();const response=await worker.fetch(api('/kvadrat-auth/login',{method:'POST',headers:{Origin:'https://elsewhere.test'}}),env);assert.equal(response.status,403);assert.equal(response.headers.get('Access-Control-Allow-Origin'),null);
 });
+test('persistent GitHub session survives reload and reopening, then logout revokes and removes it',async()=>{
+ const {SESSION_STORAGE_KEY}=await import('../api-client.js');
+ const memory=new Map(),storage={getItem:k=>memory.get(k)??null,setItem:(k,v)=>memory.set(k,v),removeItem:k=>memory.delete(k)};
+ const salt='0123456789abcdef'.repeat(3),password='test-persistent-password';
+ const env={...database(),ADMIN_BOOTSTRAP_HASH:JSON.stringify({salt,hash:await passwordHash(password,salt)})};
+ const fetcher=(url,options)=>{const headers=new Headers(options.headers);headers.set('Origin',origin);return worker.fetch(new Request(url,{...options,headers}),env);};
+ const first=createApiClient(origin,fetcher,storage);
+ const login=await first.request('/kvadrat-auth/login',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({username:'admin',password}).toString()});
+ const {sessionToken}=await login.json();first.setToken(sessionToken);
+ assert.equal(memory.get(SESSION_STORAGE_KEY),sessionToken);assert.ok(!JSON.stringify([...memory]).includes(password));
+ const reopened=createApiClient(origin,fetcher,storage);
+ assert.equal((await reopened.request('/api/workspace')).status,200);
+ // The former eight-hour expiry must no longer apply.
+ assert.ok(env.sqlite.prepare('SELECT expires_at FROM auth_sessions').get().expires_at>Date.now()+365*24*60*60*1000);
+ assert.equal((await reopened.request('/kvadrat-auth/logout',{method:'POST'})).status,200);reopened.setToken('');
+ assert.equal(memory.has(SESSION_STORAGE_KEY),false);
+ assert.equal((await first.request('/api/workspace')).status,401);
+ const third=createApiClient(origin,fetcher,storage);assert.equal((await third.request('/api/workspace')).status,401);
+});
+test('revoked sessions clear persisted token and blocked storage does not prevent login',async()=>{
+ const {SESSION_STORAGE_KEY}=await import('../api-client.js');
+ const values=new Map([[SESSION_STORAGE_KEY,'a'.repeat(64)]]);
+ const storage={getItem:k=>values.get(k),setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)};
+ const client=createApiClient(origin,async()=>Response.json({}, {status:401}),storage);
+ await client.request('/api/workspace');assert.equal(values.size,0);
+ const blocked={getItem(){throw new Error('blocked');},setItem(){throw new Error('blocked');},removeItem(){throw new Error('blocked');}};
+ let header;const fallback=createApiClient(origin,async(_,options)=>{header=options.headers.get('Authorization');return Response.json({});},blocked);
+ fallback.setToken('b'.repeat(64));await fallback.request('/api/workspace');assert.equal(header,'Bearer '+'b'.repeat(64));
+});

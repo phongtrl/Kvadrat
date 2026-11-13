@@ -1,5 +1,7 @@
 const COOKIE='__Host-kvadrat_session';
-const TTL=8*60*60;
+// Browsers cap persistent cookies at 400 days. Server sessions last until revoked.
+const TTL=400*24*60*60;
+const SESSION_EXPIRY=8640000000000000;
 const authReply=(body,status=200,headers={})=>Response.json(body,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Kvadrat-Response':'auth-v2',...headers}});
 const hex=bytes=>Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
 export async function digest(value){return hex(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)));}
@@ -21,7 +23,7 @@ export async function authenticate(request,env){
 }
 async function issueSession(username,version,env){
  const token=hex(crypto.getRandomValues(new Uint8Array(32)));
- await env.DB.prepare('INSERT INTO auth_sessions (token_hash, username, password_version, expires_at) VALUES (?, ?, ?, ?)').bind(await digest(token),username,version,Date.now()+TTL*1000).run();
+ await env.DB.prepare('INSERT INTO auth_sessions (token_hash, username, password_version, expires_at) VALUES (?, ?, ?, ?)').bind(await digest(token),username,version,SESSION_EXPIRY).run();
  return {token,cookie:cookie(token)};
 }
 async function sessionReply(request,username,version,env,body){

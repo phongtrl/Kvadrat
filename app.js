@@ -1,6 +1,6 @@
 import {createPropertyMap} from './property-map.js';
 import {loadHistoricalMarket} from './historical-market.js';
-import {apiFetch,setApiToken} from './api-client.js';
+import {apiFetch,setApiToken,SESSION_STORAGE_KEY} from './api-client.js';
 import {postAuth,readApiResponse} from './auth-client.js';
 import {createListingOverview} from './listings.js';
 import {SCHEMA_VERSION,NUMERIC_FIELDS,calculate,median,parseCSV,validateSale,validateSales,validateProject,validateBackup,csvExport} from './core.js';
@@ -238,6 +238,8 @@ $('#reload-workspace').onclick=async()=>{
 };
 $('#retry-cloud').onclick=()=>loadWorkspace();
 window.addEventListener('focus',()=>{if(ready&&!saving&&!needsReload&&!$('#project-dialog').open&&!$('#sale-dialog').open&&!$('#listing-dialog').open&&!$('#listing-import-dialog').open&&!$('#property-dialog').open)loadWorkspace(true);});
+
+window.addEventListener('storage',event=>{if(event.key===SESSION_STORAGE_KEY&&!event.newValue)showLogin();});
 
 function showLogin(){
   authVersion++;setApiToken('');ready=false;revision=null;needsReload=false;$('main').inert=true;document.body.classList.add('signed-out');$('#login-screen').hidden=false;

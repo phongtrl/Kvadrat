@@ -88,7 +88,7 @@ Sett dokumentavgiftsgrunnlaget til riktig avgiftsgrunnlag (0 ved fritak). Andre 
 
 ## Skylagring og tilgang
 
-Appen har egen innlogging på serveren. Publisert tilgang må settes til offentlig i Sites slik at innloggingssiden kan åpnes uten ChatGPT; dette gjør ikke prosjekt-API-et offentlig. Alle data- og adressesøk krever en gyldig, åtte timers serversesjon. Kontonavnet er `admin`; innloggingsopplysninger ligger ikke i frontend eller i GitHub-repoet.
+Appen har egen innlogging på serveren. Publisert tilgang må settes til offentlig i Sites slik at innloggingssiden kan åpnes uten ChatGPT; dette gjør ikke prosjekt-API-et offentlig. Alle data- og adressesøk krever en gyldig serversesjon som varer frem til utlogging eller tilbakekalling. Kontonavnet er `admin`; innloggingsopplysninger ligger ikke i frontend eller i GitHub-repoet.
 
 Passord lagres som saltet PBKDF2-SHA256-hash med 100 000 iterasjoner. Øktnøkler er tilfeldige 256-bits verdier; bare SHA-256-hashene lagres i databasen. Kapslene bruker HttpOnly, Secure, SameSite=Strict, Path=/ og __Host-prefiks. Innlogging og passordendring har en vedvarende grense på 10 forsøk per IP og 15-minutters tidsvindu. POST krever samme Origin. Utlogging tilbakekaller økten på serveren, og passordendring krever gjeldende passord og tilbakekaller andre økter. Nytt passord må ha minst 12 tegn.
 
@@ -117,7 +117,7 @@ scripts/dev-server.mjs             Kun for utviklere, aldri i hosted Worker
 tests/                             Økonomi-, import- og API-tester
 ```
 
-Utvikling krever Node.js 24+ og `npm ci`. `npm test` bygger appen og kjører 43 tester med en ekte SQLite-database i minnet. Testene kontrollerer blant annet kontoisolasjon, påloggingskrav, Origin, datavalidering, varig lagring og samtidige oppdateringer. `npm run db:generate` genererer schema-only-migreringer fra Drizzle-skjemaet. Hosted migreringer skal brukes av publiseringsflyten; tabeller opprettes aldri under API-kall.
+Utvikling krever Node.js 24+ og `npm ci`. `npm test` bygger appen og kjører 49 tester med en ekte SQLite-database i minnet. Testene kontrollerer blant annet kontoisolasjon, påloggingskrav, Origin, datavalidering, varig lagring og samtidige oppdateringer. `npm run db:generate` genererer schema-only-migreringer fra Drizzle-skjemaet. Hosted migreringer skal brukes av publiseringsflyten; tabeller opprettes aldri under API-kall.
 
 `npm run build` produserer `dist/server/index.js` med alle nødvendige nettressurser innebygd, samt manifest og migreringer. Ingen utviklingsserver, lokal database eller lokale filer inngår i brukerflyten. `npm run dev` er en valgfri utviklerforhåndsvisning med en separat testdatabase og eksplisitt konfigurert testhash i `ADMIN_BOOTSTRAP_HASH`, som ikke publiseres.
 
@@ -145,12 +145,4 @@ Klienten sender innloggingshandlinger som vanlige URL-kodede skjemadata til `/kv
 
 Grensesnittet kjører på `https://phongtrl.github.io/Kvadrat/` uten videresending. `api-client.js` sender kun API-kall til den publiserte Worker-serveren. Statiske JSON-filer lastes relativt til modulen, slik at `/Kvadrat/`-undermappen støttes. Backend tillater CORS kun fra sin egen opprinnelse og `https://phongtrl.github.io`, med eksplisitt forhåndskontroll av metode og headere.
 
-GitHub-grensesnittet sender ikke eller mottar øktkapsler fra et annet nettsted. Etter gyldig innlogging får det i stedet en tilfeldig øktnøkkel, som kun holdes i JavaScript-minnet og sendes i Authorization-headeren. Den legges aldri i URL, localStorage eller sessionStorage. Siden må logges inn på nytt etter en full omlasting; selve prosjektdataene ligger fortsatt i D1. Samme-origin-bruk på Worker-domenet bruker fortsatt sikre HttpOnly-kapsler. Begge transportene bruker samme serversesjoner, utløpstid, ratebegrensning og tilbakekalling.
-
-Innloggingsskjemaet har eksplisitt POST-metode, ingen navngitte passord-/brukernavnkontroller som kan serialiseres av nettleseren, og en knapp som holdes deaktivert til appen er startet. JavaScript leser feltene eksplisitt og sender dem i POST-kroppen. Oppstarten rydder bort gamle username/password-queryparametre fra den aktuelle historikkoppføringen og setter aldri en ny nettadresse for innlogging. Dette kan ikke slette opplysninger som allerede ble sendt til serverlogger eller lagret i tidligere nettleserhistorikk før rettelsen. Referrer er slått av.
-
-### Kart etter innlogging
-
-Kart opprettes først når kartbeholderen har en synlig bredde og høyde. Dette unngår at Leaflet initialiseres med null størrelse mens innloggingsskjermen skjuler appen. ResizeObserver oppdaterer dimensjonene ved vindusendringer og når visningen blir synlig igjen.
-
-Kartfliser bruker den kanoniske `https://tile.openstreetmap.org/{z}/{x}/{y}.png`-adressen og `referrerPolicy: origin`. Sidens referrer-policy er `strict-origin`, slik at domenet kan identifiseres uten å sende URL-sti eller queryparametre. Dette følger https://operations.osmfoundation.org/policies/tiles/ . Workerens CSP tillater også kartserverens hoveddomene. Annonsekartet viser en feilmelding og har en knapp for ny innlasting hvis bakgrunnskartet ikke kan lastes.
+GitHub-grensesnittet sender ikke eller mottar øktkapsler fra et annet nettsted. Etter gyldig innlogging får det en tilfeldig øktnøkkel som lagres i localStorage på GitHub-opprinnelsen og sendes i Authorization-headeren. Brukernavn og passord lagres ikke i nettleseren eller i URL. Økten gjenopprettes ved omlasting og gjenåpning, og fjernes ved utlogging eller HTTP 401. Andre faner oppdager utlogging gjennom storage-hendelsen. Samme-origin-bruk på Worker-domenet bruker sikre HttpOnly-kapsler med nettleserens maksimale levetid på 400 dager. Serversesjoner avsluttes ved utlogging eller passordendring; sletting av nettleserdata krever ny innlogging. Lokal lagring som er blokkert av nettleseren, gir kun innlogging i gjeldende sideøkt.
