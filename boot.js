@@ -6,6 +6,6 @@ if(clean.searchParams.has('username')||clean.searchParams.has('password')){
 }
 const form=document.querySelector('#login-form');
 form.addEventListener('submit',event=>{if(form.dataset.ready!=='true')event.preventDefault();});
-import('./app.js?v=persistent-login-v1').catch(()=>{
+import('./app.js?v=combined-property-map-v1').catch(()=>{
  const error=document.querySelector('#login-error');error.textContent='Appen kunne ikke starte. Last siden på nytt med Ctrl + F5.';error.hidden=false;
 });

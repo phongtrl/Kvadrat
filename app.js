@@ -268,5 +268,5 @@ async function init(){
 }
 $('#login-form').dataset.ready='true';$('#login-submit').disabled=false;
 listingUI=createListingOverview({getState:()=>state,commit,openProject,toast,escape,kr,num,stat});
-propertyUI=createPropertyMap({getState:()=>state,commit,toast,escape});
+propertyUI=createPropertyMap({getState:()=>state,commit,toast,escape,openProject});
 init();
