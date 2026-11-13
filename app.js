@@ -1,3 +1,4 @@
+import {postAuth,readApiResponse} from './auth-client.js';
 import {createListingOverview} from './listings.js';
 import {SCHEMA_VERSION,NUMERIC_FIELDS,calculate,median,parseCSV,validateSale,validateSales,validateProject,validateBackup,csvExport} from './core.js';
 
@@ -44,7 +45,7 @@ async function commit(next){
   saving=true;syncStatus('Lagrer på nett …');
   try{
     const response=await fetch('/api/workspace',{method:'PUT',credentials:'same-origin',signal:AbortSignal.timeout(20000),headers:{'Content-Type':'application/json','If-Match':String(revision)},body:JSON.stringify(next)});
-    const result=await response.json();
+    const result=await readApiResponse(response);
     if(!response.ok){if(response.status===409)needsReload=true;if(response.status===401)showLogin();throw new Error(result.error||'Lagring mislyktes.');}
     revision=result.revision;state=next;syncStatus('Lagret på nett');return true;
   }catch(e){syncStatus(needsReload?'Ny versjon tilgjengelig':'Ikke lagret',true);toast(`${e.message} Endringene er ikke bekreftet lagret.`,true);return false;}
@@ -56,7 +57,7 @@ async function loadWorkspace(background=false){
   try{
     const response=await fetch('/api/workspace',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000)});
     if(!response.headers.get('content-type')?.includes('application/json'))throw new Error('Logg inn for å åpne arbeidsområdet.');
-    const result=await response.json();if(response.status===401){showLogin();return;}if(!response.ok)throw new Error(result.error||'Arbeidsområdet kunne ikke lastes.');
+    const result=await readApiResponse(response);if(response.status===401){showLogin();return;}if(!response.ok)throw new Error(result.error||'Arbeidsområdet kunne ikke lastes.');
     if(saving||$('#project-dialog').open||$('#sale-dialog').open||$('#listing-dialog').open||$('#listing-import-dialog').open)return;
     state=validateBackup(result.workspace);revision=result.revision;ready=true;needsReload=false;
     $('#cloud-error').hidden=true;$('#login-screen').hidden=true;document.body.classList.remove('signed-out');$('main').inert=false;syncStatus('Lagret på nett');route();
@@ -234,21 +235,17 @@ function showLogin(){
   $$('dialog form').forEach(form=>form.reset());
   $('#login-form').elements.password.value='';renderAll();
 }
-async function authPost(path,body={}){
-  const response=await fetch('/api/auth/'+path,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(20000)});
-  const result=await response.json();if(!response.ok)throw new Error(result.error||'Forespørselen feilet.');return result;
-}
-$('#login-form').addEventListener('submit',async e=>{e.preventDefault();$('#login-submit').disabled=true;$('#login-error').hidden=true;try{await authPost('login',Object.fromEntries(new FormData(e.target)));e.target.elements.password.value='';await loadWorkspace();}catch(error){$('#login-error').textContent=error.message;$('#login-error').hidden=false;}finally{$('#login-submit').disabled=false;}});
+$('#login-form').addEventListener('submit',async e=>{e.preventDefault();$('#login-submit').disabled=true;$('#login-error').hidden=true;try{await postAuth('login',Object.fromEntries(new FormData(e.target)));e.target.elements.password.value='';await loadWorkspace();}catch(error){$('#login-error').textContent=error.message;$('#login-error').hidden=false;}finally{$('#login-submit').disabled=false;}});
 $('#logout-button').onclick=async()=>{
   if(saving)return;
   if($$('dialog[open]').length&&!await confirmAction('Logge ut?','Ulagrede endringer i skjemaet forkastes når du logger ut.'))return;
-  try{await authPost('logout');showLogin();$('#login-error').hidden=true;}catch(error){toast(error.message,true);}
+  try{await postAuth('logout');showLogin();$('#login-error').hidden=true;}catch(error){toast(error.message,true);}
 };
 $('#change-password').onclick=()=>{$('#password-form').reset();$('#password-error').hidden=true;$('#password-dialog').showModal();};
 $('#close-password').onclick=()=>{$('#password-dialog').close();$('#password-form').reset();};
 $('#password-form').addEventListener('submit',async e=>{e.preventDefault();const values=Object.fromEntries(new FormData(e.target));$('#password-error').hidden=true;
   if(values.newPassword!==values.confirmPassword){$('#password-error').textContent='De nye passordene er ikke like.';$('#password-error').hidden=false;return;}
-  $('#password-submit').disabled=true;try{await authPost('password',values);$('#password-dialog').close();e.target.reset();toast('Passordet er endret. Andre økter er logget ut.');}catch(error){$('#password-error').textContent=error.message;$('#password-error').hidden=false;}finally{$('#password-submit').disabled=false;}
+  $('#password-submit').disabled=true;try{await postAuth('password',values);$('#password-dialog').close();e.target.reset();toast('Passordet er endret. Andre økter er logget ut.');}catch(error){$('#password-error').textContent=error.message;$('#password-error').hidden=false;}finally{$('#password-submit').disabled=false;}
 });
 
 async function init(){

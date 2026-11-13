@@ -1,6 +1,6 @@
 const COOKIE='__Host-kvadrat_session';
 const TTL=8*60*60;
-const authReply=(body,status=200,headers={})=>Response.json(body,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...headers}});
+const authReply=(body,status=200,headers={})=>Response.json(body,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Kvadrat-Response':'auth-v2',...headers}});
 const hex=bytes=>Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
 export async function digest(value){return hex(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)));}
 export async function passwordHash(password,salt){
@@ -21,12 +21,14 @@ async function issueSession(username,version,env){
  return cookie(token);
 }
 async function credentials(request){
- if(!request.headers.get('content-type')?.toLowerCase().startsWith('application/json'))throw new Error('Forventet JSON.');
+ const type=request.headers.get('content-type')?.toLowerCase()||'';
+ if(!type.startsWith('application/json')&&!type.startsWith('application/x-www-form-urlencoded'))throw new Error('Ugyldig innholdsformat.');
  const reader=request.body?.getReader();if(!reader)throw new Error('Tom forespørsel.');let size=0;const parts=[];
  try{for(;;){const {value,done}=await reader.read();if(done)break;size+=value.byteLength;if(size>8192){await reader.cancel();throw new Error('For stor forespørsel.');}parts.push(value);}}
  finally{reader.releaseLock();}
  const bytes=new Uint8Array(size);let offset=0;for(const part of parts){bytes.set(part,offset);offset+=part.byteLength;}
- const value=JSON.parse(new TextDecoder().decode(bytes));if(!value||typeof value!=='object')throw new Error('Ugyldige opplysninger.');return value;
+ const text=new TextDecoder().decode(bytes);
+ const value=type.startsWith('application/json')?JSON.parse(text):Object.fromEntries(new URLSearchParams(text));if(!value||typeof value!=='object')throw new Error('Ugyldige opplysninger.');return value;
 }
 async function consumeAttempt(request,env,action){
  const now=Date.now(),window=Math.floor(now/900000),ip=request.headers.get('cf-connecting-ip')||'unknown';
@@ -36,7 +38,7 @@ async function consumeAttempt(request,env,action){
  return row.attempts<=10;
 }
 export async function handleAuth(request,env){
- const path=new URL(request.url).pathname;
+ const path=new URL(request.url).pathname.replace(/^\/kvadrat-auth\//,'/api/auth/');
  if(!env.DB)return authReply({error:'Innloggingen er midlertidig utilgjengelig.'},503);
  if(path==='/api/auth/session'){
   if(request.method!=='GET')return authReply({error:'Metoden er ikke tillatt.'},405);

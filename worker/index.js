@@ -19,7 +19,7 @@ async function readBounded(request,max){
 
 export async function handleApi(request,env){
   const url=new URL(request.url);
-  if(url.pathname.startsWith('/api/auth/'))return handleAuth(request,env);
+  if(url.pathname.startsWith('/api/auth/')||url.pathname.startsWith('/kvadrat-auth/'))return handleAuth(request,env);
   if(!env.DB)return error('Lagringen er ikke tilgjengelig. Prøv igjen om litt.',503);
   const user=await authenticate(request,env);
   if(!user)return error('Logg inn for å åpne arbeidsområdet.',401);
@@ -64,7 +64,7 @@ export default {
   async fetch(request,env){
     try{
       const url=new URL(request.url);
-      if(url.pathname.startsWith('/api/'))return await handleApi(request,env);
+      if(url.pathname.startsWith('/api/')||url.pathname.startsWith('/kvadrat-auth/'))return await handleApi(request,env);
       if(!['GET','HEAD'].includes(request.method))return new Response('Method not allowed',{status:405});
       const key=url.pathname==='/'?'/index.html':url.pathname;
       const asset=Object.hasOwn(assets,key)?assets[key]:null;

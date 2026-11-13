@@ -117,7 +117,7 @@ scripts/dev-server.mjs             Kun for utviklere, aldri i hosted Worker
 tests/                             Økonomi-, import- og API-tester
 ```
 
-Utvikling krever Node.js 24+ og `npm ci`. `npm test` bygger appen og kjører 33 tester med en ekte SQLite-database i minnet. Testene kontrollerer blant annet kontoisolasjon, påloggingskrav, Origin, datavalidering, varig lagring og samtidige oppdateringer. `npm run db:generate` genererer schema-only-migreringer fra Drizzle-skjemaet. Hosted migreringer skal brukes av publiseringsflyten; tabeller opprettes aldri under API-kall.
+Utvikling krever Node.js 24+ og `npm ci`. `npm test` bygger appen og kjører 37 tester med en ekte SQLite-database i minnet. Testene kontrollerer blant annet kontoisolasjon, påloggingskrav, Origin, datavalidering, varig lagring og samtidige oppdateringer. `npm run db:generate` genererer schema-only-migreringer fra Drizzle-skjemaet. Hosted migreringer skal brukes av publiseringsflyten; tabeller opprettes aldri under API-kall.
 
 `npm run build` produserer `dist/server/index.js` med alle nødvendige nettressurser innebygd, samt manifest og migreringer. Ingen utviklingsserver, lokal database eller lokale filer inngår i brukerflyten. `npm run dev` er en valgfri utviklerforhåndsvisning med en separat testdatabase og eksplisitt konfigurert testhash i `ADMIN_BOOTSTRAP_HASH`, som ikke publiseres.
 
@@ -134,3 +134,9 @@ Direkte henting av FINNs søkeside returnerte 403 med JavaScript-/anti-bot-kontr
 På siden kan du lagre annonser med FINN-lenke og opplysninger eller lime inn en JSON-liste. FINN-lenken henter ikke automatisk annonseinnhold. Samme FINN-kode oppdaterer samme kandidat. Egne endringer og favoritter lagres i kontoens skylagring og følger med sikkerhetskopien. Eldre sikkerhetskopier uten `listings` støttes fortsatt.
 
 «Vis på kart» slår opp manglende koordinater hos Kartverket og godtar bare ett eksakt adressetreff. Ukjente posisjoner vises aldri som et vilkårlig sentrumspunkt. «Vurder prosjekt» overfører prisantydning, fellesgjeld og øvrige oppgitte kostnader til prosjektkalkylen. Forventet salg settes lik prisantydning og oppussingsbudsjettet til 0; dette er ikke en lønnsomhetsprognose. Brukeren må sette egne forutsetninger. Annonser markert solgt eller trukket har ikke prosjektknapp aktivert.
+
+### Innloggingstransport og feilsvar
+
+Klienten sender innloggingshandlinger som vanlige URL-kodede skjemadata til `/kvadrat-auth/login`, `/kvadrat-auth/logout` og `/kvadrat-auth/password`. Disse app-eide rutene ligger utenfor vertsleverandørens `/api/auth/`-navnerom. De gamle JSON-rutene beholdes for bakoverkompatibilitet, med samme ratebegrensning og øktkontroll.
+
+`auth-client.js` kontrollerer Content-Type og svarstruktur før JSON brukes. HTML-feilsider fra hosting, mellomlagring eller sikkerhetsgateway vises aldri som rå JSON-parserfeil eller HTML i brukergrensesnittet. Klienten viser en norsk melding med HTTP-status. Innlogging regnes først som bekreftet når serveren svarer med riktig bruker. De automatiserte testene dekker HTML-svar med både suksess- og feilstatus, ugyldig JSON, skjemakoding av spesialtegn og hele klient–Worker–SQLite-flyten.
