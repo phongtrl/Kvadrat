@@ -1,11 +1,23 @@
 import {SCHEMA_VERSION, validateBackup} from '../core.js';
 import demoSales from '../data/demo-sales.json' with {type:'json'};
 import {assets} from '../.generated/assets.js';
-import {authenticate,handleAuth} from './auth.js';
+import {authenticate,handleAuth,allowedRequestOrigin} from './auth.js';
 
 export const MAX_WORKSPACE_BYTES=1800000;
 const json=(value,status=200,extra={})=>Response.json(value,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...extra}});
 function error(message,status){return json({error:message},status);}
+function cors(request,response){
+ if(!allowedRequestOrigin(request))return response;
+ const headers=new Headers(response.headers);headers.set('Access-Control-Allow-Origin',request.headers.get('origin'));headers.set('Vary','Origin');
+ return new Response(response.body,{status:response.status,headers});
+}
+function preflight(request){
+ if(!allowedRequestOrigin(request))return error('Ukjent nettsted.',403);
+ const method=request.headers.get('access-control-request-method');
+ const headers=(request.headers.get('access-control-request-headers')||'').toLowerCase().split(',').map(h=>h.trim()).filter(Boolean);
+ if(!['GET','POST','PUT'].includes(method)||headers.some(h=>!['authorization','content-type','if-match','accept'].includes(h)))return error('Forespørselen er ikke tillatt.',403);
+ return cors(request,new Response(null,{status:204,headers:{'Access-Control-Allow-Methods':'GET, POST, PUT','Access-Control-Allow-Headers':'Authorization, Content-Type, If-Match, Accept','Access-Control-Max-Age':'600'}}));
+}
 
 async function readBounded(request,max){
   if(Number(request.headers.get('content-length'))>max)throw new RangeError('For stor fil.');
@@ -45,7 +57,7 @@ export async function handleApi(request,env){
     return json({workspace:JSON.parse(row.data),revision:row.revision,updatedAt:row.updated_at,user:{displayName:user.username}});
   }
   // Les identitet fra plattformen; eier-ID aksepteres aldri fra brukerens JSON.
-  if(request.headers.get('origin')!==url.origin)return error('Forespørselen må komme fra Kvadrat-siden.',403);
+  if(!allowedRequestOrigin(request))return error('Forespørselen må komme fra Kvadrat-siden.',403);
   if(!request.headers.get('content-type')?.toLowerCase().startsWith('application/json'))return error('Forventet JSON.',415);
   const revisionHeader=request.headers.get('if-match');
   if(!revisionHeader||!/^\d+$/.test(revisionHeader))return error('Last inn arbeidsområdet på nytt før du lagrer.',428);
@@ -64,7 +76,11 @@ export default {
   async fetch(request,env){
     try{
       const url=new URL(request.url);
-      if(url.pathname.startsWith('/api/')||url.pathname.startsWith('/kvadrat-auth/'))return await handleApi(request,env);
+      if(url.pathname.startsWith('/api/')||url.pathname.startsWith('/kvadrat-auth/')){
+        if(request.method==='OPTIONS')return preflight(request);
+        if(request.headers.has('origin')&&!allowedRequestOrigin(request))return error('Ukjent nettsted.',403);
+        return cors(request,await handleApi(request,env));
+      }
       if(!['GET','HEAD'].includes(request.method))return new Response('Method not allowed',{status:405});
       const key=url.pathname==='/'?'/index.html':url.pathname;
       const asset=Object.hasOwn(assets,key)?assets[key]:null;
@@ -75,6 +91,6 @@ export default {
         'Referrer-Policy':'strict-origin-when-cross-origin','Permissions-Policy':'camera=(), microphone=(), geolocation=()',
         'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
       }});
-    }catch(e){console.error('Kvadrat request failed',e?.name||'Error');return error('En serverfeil oppstod. Ingen lagring er bekreftet. Prøv igjen.',500);}
+    }catch(e){console.error('Kvadrat request failed',e?.name||'Error');return cors(request,error('En serverfeil oppstod. Ingen lagring er bekreftet. Prøv igjen.',500));}
   }
 };

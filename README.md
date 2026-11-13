@@ -117,7 +117,7 @@ scripts/dev-server.mjs             Kun for utviklere, aldri i hosted Worker
 tests/                             Økonomi-, import- og API-tester
 ```
 
-Utvikling krever Node.js 24+ og `npm ci`. `npm test` bygger appen og kjører 37 tester med en ekte SQLite-database i minnet. Testene kontrollerer blant annet kontoisolasjon, påloggingskrav, Origin, datavalidering, varig lagring og samtidige oppdateringer. `npm run db:generate` genererer schema-only-migreringer fra Drizzle-skjemaet. Hosted migreringer skal brukes av publiseringsflyten; tabeller opprettes aldri under API-kall.
+Utvikling krever Node.js 24+ og `npm ci`. `npm test` bygger appen og kjører 42 tester med en ekte SQLite-database i minnet. Testene kontrollerer blant annet kontoisolasjon, påloggingskrav, Origin, datavalidering, varig lagring og samtidige oppdateringer. `npm run db:generate` genererer schema-only-migreringer fra Drizzle-skjemaet. Hosted migreringer skal brukes av publiseringsflyten; tabeller opprettes aldri under API-kall.
 
 `npm run build` produserer `dist/server/index.js` med alle nødvendige nettressurser innebygd, samt manifest og migreringer. Ingen utviklingsserver, lokal database eller lokale filer inngår i brukerflyten. `npm run dev` er en valgfri utviklerforhåndsvisning med en separat testdatabase og eksplisitt konfigurert testhash i `ADMIN_BOOTSTRAP_HASH`, som ikke publiseres.
 
@@ -140,3 +140,11 @@ På siden kan du lagre annonser med FINN-lenke og opplysninger eller lime inn en
 Klienten sender innloggingshandlinger som vanlige URL-kodede skjemadata til `/kvadrat-auth/login`, `/kvadrat-auth/logout` og `/kvadrat-auth/password`. Disse app-eide rutene ligger utenfor vertsleverandørens `/api/auth/`-navnerom. De gamle JSON-rutene beholdes for bakoverkompatibilitet, med samme ratebegrensning og øktkontroll.
 
 `auth-client.js` kontrollerer Content-Type og svarstruktur før JSON brukes. HTML-feilsider fra hosting, mellomlagring eller sikkerhetsgateway vises aldri som rå JSON-parserfeil eller HTML i brukergrensesnittet. Klienten viser en norsk melding med HTTP-status. Innlogging regnes først som bekreftet når serveren svarer med riktig bruker. De automatiserte testene dekker HTML-svar med både suksess- og feilstatus, ugyldig JSON, skjemakoding av spesialtegn og hele klient–Worker–SQLite-flyten.
+
+## GitHub Pages-adressen beholdes
+
+Grensesnittet kjører på `https://phongtrl.github.io/Kvadrat/` uten videresending. `api-client.js` sender kun API-kall til den publiserte Worker-serveren. Statiske JSON-filer lastes relativt til modulen, slik at `/Kvadrat/`-undermappen støttes. Backend tillater CORS kun fra sin egen opprinnelse og `https://phongtrl.github.io`, med eksplisitt forhåndskontroll av metode og headere.
+
+GitHub-grensesnittet sender ikke eller mottar øktkapsler fra et annet nettsted. Etter gyldig innlogging får det i stedet en tilfeldig øktnøkkel, som kun holdes i JavaScript-minnet og sendes i Authorization-headeren. Den legges aldri i URL, localStorage eller sessionStorage. Siden må logges inn på nytt etter en full omlasting; selve prosjektdataene ligger fortsatt i D1. Samme-origin-bruk på Worker-domenet bruker fortsatt sikre HttpOnly-kapsler. Begge transportene bruker samme serversesjoner, utløpstid, ratebegrensning og tilbakekalling.
+
+Innloggingsskjemaet har eksplisitt POST-metode, ingen navngitte passord-/brukernavnkontroller som kan serialiseres av nettleseren, og en knapp som holdes deaktivert til appen er startet. JavaScript leser feltene eksplisitt og sender dem i POST-kroppen. Oppstarten rydder bort gamle username/password-queryparametre fra den aktuelle historikkoppføringen og setter aldri en ny nettadresse for innlogging. Dette kan ikke slette opplysninger som allerede ble sendt til serverlogger eller lagret i tidligere nettleserhistorikk før rettelsen. Referrer er slått av.

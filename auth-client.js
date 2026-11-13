@@ -1,3 +1,4 @@
+import {apiFetch,setApiToken,remoteApi} from './api-client.js';
 // The app's login routes are separate from hosting providers' /api/auth routes.
 export async function readApiResponse(response){
  const type=response.headers.get('content-type')||'';
@@ -10,7 +11,7 @@ export async function readApiResponse(response){
  return result;
 }
 
-export async function postAuth(path,body={},fetcher=fetch){
+export async function postAuth(path,body={},fetcher=apiFetch){
  if(!['login','logout','password'].includes(path))throw new Error('Ukjent innloggingshandling.');
  const response=await fetcher('/kvadrat-auth/'+path,{method:'POST',credentials:'same-origin',cache:'no-store',
   headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8','Accept':'application/json'},
@@ -18,5 +19,10 @@ export async function postAuth(path,body={},fetcher=fetch){
  const result=await readApiResponse(response);
  if(!response.ok)throw new Error(result.error||'Forespørselen feilet.');
  if(path==='login'&&result.user?.username!=='admin')throw new Error('Innloggingen kunne ikke bekreftes. Prøv igjen.');
+ if((path==='login'||path==='password')&&remoteApi&&fetcher===apiFetch){
+  if(!/^[a-f0-9]{64}$/.test(result.sessionToken||''))throw new Error('Serveren bekreftet ikke innloggingsøkten.');
+  setApiToken(result.sessionToken);
+ }
+ if(path==='logout')setApiToken('');
  return result;
 }

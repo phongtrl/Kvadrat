@@ -1,3 +1,4 @@
+import {apiFetch,setApiToken} from './api-client.js';
 import {postAuth,readApiResponse} from './auth-client.js';
 import {createListingOverview} from './listings.js';
 import {SCHEMA_VERSION,NUMERIC_FIELDS,calculate,median,parseCSV,validateSale,validateSales,validateProject,validateBackup,csvExport} from './core.js';
@@ -36,6 +37,7 @@ function renderIcons(root=document){root.querySelectorAll('[data-icon]').forEach
 renderIcons();
 
 let state={schemaVersion:SCHEMA_VERSION,sales:[],projects:[]}, demoSales=[],filtered=[],map,markerGroup,addressMarker,selectedId=null,currentPage='annonser',editingExpenses=[],editingTasks=[],revision=null,saving=false,ready=false,needsReload=false;
+let authVersion=0;
 let listingUI;
 let toastTimer;
 function toast(message,error=false){clearTimeout(toastTimer);$('#toast').textContent=message;$('#toast').classList.toggle('error',error);$('#toast').hidden=false;toastTimer=setTimeout(()=>$('#toast').hidden=true,5500);}
@@ -44,7 +46,7 @@ async function commit(next){
   if(!ready||saving||needsReload){toast(needsReload?'Hent siste versjon før du lagrer.':'Vent til arbeidsområdet er klart.',true);return false;}
   saving=true;syncStatus('Lagrer på nett …');
   try{
-    const response=await fetch('/api/workspace',{method:'PUT',credentials:'same-origin',signal:AbortSignal.timeout(20000),headers:{'Content-Type':'application/json','If-Match':String(revision)},body:JSON.stringify(next)});
+    const response=await apiFetch('/api/workspace',{method:'PUT',credentials:'same-origin',signal:AbortSignal.timeout(20000),headers:{'Content-Type':'application/json','If-Match':String(revision)},body:JSON.stringify(next)});
     const result=await readApiResponse(response);
     if(!response.ok){if(response.status===409)needsReload=true;if(response.status===401)showLogin();throw new Error(result.error||'Lagring mislyktes.');}
     revision=result.revision;state=next;syncStatus('Lagret på nett');return true;
@@ -53,11 +55,12 @@ async function commit(next){
 }
 async function loadWorkspace(background=false){
   if(saving)return;
+  const startedVersion=authVersion;
   if(!background){$('main').inert=true;syncStatus('Kobler til …');}
   try{
-    const response=await fetch('/api/workspace',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000)});
+    const response=await apiFetch('/api/workspace',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000)});
     if(!response.headers.get('content-type')?.includes('application/json'))throw new Error('Logg inn for å åpne arbeidsområdet.');
-    const result=await readApiResponse(response);if(response.status===401){showLogin();return;}if(!response.ok)throw new Error(result.error||'Arbeidsområdet kunne ikke lastes.');
+    const result=await readApiResponse(response);if(startedVersion!==authVersion)return;if(response.status===401){showLogin();return;}if(!response.ok)throw new Error(result.error||'Arbeidsområdet kunne ikke lastes.');
     if(saving||$('#project-dialog').open||$('#sale-dialog').open||$('#listing-dialog').open||$('#listing-import-dialog').open)return;
     state=validateBackup(result.workspace);revision=result.revision;ready=true;needsReload=false;
     $('#cloud-error').hidden=true;$('#login-screen').hidden=true;document.body.classList.remove('signed-out');$('main').inert=false;syncStatus('Lagret på nett');route();
@@ -172,7 +175,7 @@ async function importSales(file){
 let searchTimer,searchController,searchVersion=0;
 $('#address-search').addEventListener('input',()=>{clearTimeout(searchTimer);searchController?.abort();const version=++searchVersion;const q=$('#address-search').value.trim(),results=$('#address-results');if(q.length<3){results.hidden=true;return;}results.hidden=false;results.textContent='Søker i Kartverkets adressedata …';searchTimer=setTimeout(async()=>{
   searchController=new AbortController();const timeout=setTimeout(()=>searchController.abort(),10000);
-  try{const url=new URL('/api/addresses',location.origin);url.searchParams.set('q',q);const r=await fetch(url,{signal:searchController.signal});if(!r.ok)throw new Error();const data=await r.json();if(version!==searchVersion)return;const rows=(data.adresser||[]).filter(a=>a.kommunenummer==='5001');results.innerHTML=rows.length?rows.map((a,i)=>`<button type="button" data-address-index="${i}">${escape(a.adressetekst)}<br><small>${escape(a.postnummer)} ${escape(a.poststed)}</small></button>`).join(''):'Ingen adresser funnet i Trondheim. Prøv gate og husnummer.';
+  try{const url='/api/addresses?'+new URLSearchParams({q});const r=await apiFetch(url,{signal:searchController.signal});if(!r.ok)throw new Error();const data=await r.json();if(version!==searchVersion)return;const rows=(data.adresser||[]).filter(a=>a.kommunenummer==='5001');results.innerHTML=rows.length?rows.map((a,i)=>`<button type="button" data-address-index="${i}">${escape(a.adressetekst)}<br><small>${escape(a.postnummer)} ${escape(a.poststed)}</small></button>`).join(''):'Ingen adresser funnet i Trondheim. Prøv gate og husnummer.';
     results.querySelectorAll('button').forEach((b,i)=>b.onclick=()=>{const a=rows[i],pos=a.representasjonspunkt;results.hidden=true;$('#address-search').value=a.adressetekst;if(map){if(addressMarker)map.removeLayer(addressMarker);addressMarker=L.circleMarker([pos.lat,pos.lon],{radius:9,color:'#b78a55',fillColor:'#fff',fillOpacity:1,weight:3}).addTo(map);map.setView([pos.lat,pos.lon],17);}selectedId=null;$('#insight-panel').innerHTML=`<div class="insight-label">ADRESSE FRA KARTVERKET ${icon('check')}</div><div class="area-heading"><span class="area-icon">${icon('pin')}</span><div><h2 style="font-size:17px">${escape(a.adressetekst)}</h2><small>${escape(a.postnummer)} ${escape(a.poststed)}</small></div></div><div class="insight-rows"><div class="insight-row"><span>Kommune</span><strong>Trondheim · 5001</strong></div><div class="insight-row"><span>Breddegrad</span><strong>${num(pos.lat,5)}</strong></div><div class="insight-row"><span>Lengdegrad</span><strong>${num(pos.lon,5)}</strong></div></div><p class="insight-note">Dette er offisielle adressedata. Salgspris, areal og tilstand følger ikke med adresseoppslaget.</p><button class="button primary" id="project-from-address">${icon('plus')} Vurder som prosjekt</button>`;$('#project-from-address').onclick=()=>openProject(null,{address:a.adressetekst,name:a.adressetekst,lat:pos.lat,lng:pos.lon,notes:'Adresse og koordinater fra Kartverkets Adresse REST-API. Alle økonomiske felt er foreløpige standardverdier og må vurderes.'});});
   }catch(e){if(version===searchVersion){results.textContent='Adressesøket er utilgjengelig akkurat nå. Kontroller nettilgangen og prøv igjen.';}}
   finally{clearTimeout(timeout);}
@@ -215,7 +218,7 @@ $('#sale-lookup').onclick=async()=>{
   const form=$('#sale-form'),q=form.elements.address.value.trim(),results=$('#sale-address-results');
   if(q.length<3){toast('Skriv gate og husnummer først.',true);return;}
   results.textContent='Søker i Kartverkets adressedata …';
-  try{const response=await fetch('/api/addresses?'+new URLSearchParams({q}));const data=await response.json();if(!response.ok)throw new Error(data.error);const rows=data.adresser||[];results.innerHTML=rows.length?rows.map((a,i)=>`<button type="button" class="button light" data-result="${i}">${escape(a.adressetekst)} · ${escape(a.poststed)}</button>`).join(''):'Ingen treff i Trondheim. Prøv et mer presist søk.';results.querySelectorAll('button').forEach((button,i)=>button.onclick=()=>{const a=rows[i];form.elements.address.value=a.adressetekst;form.elements.lat.value=a.representasjonspunkt.lat;form.elements.lng.value=a.representasjonspunkt.lon;results.textContent='Adresse og koordinater hentet fra Kartverket.';});}
+  try{const response=await apiFetch('/api/addresses?'+new URLSearchParams({q}));const data=await response.json();if(!response.ok)throw new Error(data.error);const rows=data.adresser||[];results.innerHTML=rows.length?rows.map((a,i)=>`<button type="button" class="button light" data-result="${i}">${escape(a.adressetekst)} · ${escape(a.poststed)}</button>`).join(''):'Ingen treff i Trondheim. Prøv et mer presist søk.';results.querySelectorAll('button').forEach((button,i)=>button.onclick=()=>{const a=rows[i];form.elements.address.value=a.adressetekst;form.elements.lat.value=a.representasjonspunkt.lat;form.elements.lng.value=a.representasjonspunkt.lon;results.textContent='Adresse og koordinater hentet fra Kartverket.';});}
   catch(error){results.textContent=error.message||'Kunne ikke hente adressen. Prøv igjen.';}
 };
 $('#paste-sales').onclick=()=>{$('#pasted-sales').value='';$('#paste-dialog').showModal();};
@@ -230,12 +233,12 @@ $('#retry-cloud').onclick=()=>loadWorkspace();
 window.addEventListener('focus',()=>{if(ready&&!saving&&!needsReload&&!$('#project-dialog').open&&!$('#sale-dialog').open&&!$('#listing-dialog').open&&!$('#listing-import-dialog').open)loadWorkspace(true);});
 
 function showLogin(){
-  ready=false;revision=null;needsReload=false;$('main').inert=true;document.body.classList.add('signed-out');$('#login-screen').hidden=false;
+  authVersion++;setApiToken('');ready=false;revision=null;needsReload=false;$('main').inert=true;document.body.classList.add('signed-out');$('#login-screen').hidden=false;
   $$('dialog[open]').forEach(d=>d.close());state={schemaVersion:SCHEMA_VERSION,sales:[],projects:[],listings:[]};editingExpenses=[];editingTasks=[];
   $$('dialog form').forEach(form=>form.reset());
-  $('#login-form').elements.password.value='';renderAll();
+  $('#login-password').value='';renderAll();
 }
-$('#login-form').addEventListener('submit',async e=>{e.preventDefault();$('#login-submit').disabled=true;$('#login-error').hidden=true;try{await postAuth('login',Object.fromEntries(new FormData(e.target)));e.target.elements.password.value='';await loadWorkspace();}catch(error){$('#login-error').textContent=error.message;$('#login-error').hidden=false;}finally{$('#login-submit').disabled=false;}});
+$('#login-form').addEventListener('submit',async e=>{e.preventDefault();authVersion++;$('#login-submit').disabled=true;$('#login-error').hidden=true;try{await postAuth('login',{username:$('#login-username').value,password:$('#login-password').value});$('#login-password').value='' ;await loadWorkspace();}catch(error){$('#login-error').textContent=error.message;$('#login-error').hidden=false;}finally{$('#login-submit').disabled=false;}});
 $('#logout-button').onclick=async()=>{
   if(saving)return;
   if($$('dialog[open]').length&&!await confirmAction('Logge ut?','Ulagrede endringer i skjemaet forkastes når du logger ut.'))return;
@@ -250,8 +253,9 @@ $('#password-form').addEventListener('submit',async e=>{e.preventDefault();const
 
 async function init(){
   $('main').inert=true;
-  try{const r=await fetch('/data/demo-sales.json');if(r.ok)demoSales=validateSales(await r.json(),true);}catch{}
+  try{const r=await fetch(new URL('./data/demo-sales.json',import.meta.url));if(r.ok)demoSales=validateSales(await r.json(),true);}catch{}
   initMap();route();setMapView(true);await loadWorkspace();
 }
+$('#login-form').dataset.ready='true';$('#login-submit').disabled=false;
 listingUI=createListingOverview({getState:()=>state,commit,openProject,toast,escape,kr,num,stat});
 init();

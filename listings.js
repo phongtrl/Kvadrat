@@ -1,3 +1,4 @@
+import {apiFetch} from './api-client.js';
 import {validateListing} from './core.js';
 
 export function createListingOverview({getState,commit,openProject,toast,escape,kr,num,stat}){
@@ -28,7 +29,7 @@ export function createListingOverview({getState,commit,openProject,toast,escape,
  function edit(l=null){editing=l;const form=$('#listing-form');form.reset();if(l)for(const [key,value]of Object.entries(l)){const field=form.elements.namedItem(key);if(field){if(field.type==='checkbox')field.checked=!!value;else field.value=value??'';}}$('#listing-dialog').showModal();}
  async function locate(l){
   if(l.lat!==null&&l.lng!==null)return l;
-  const response=await fetch('/api/addresses?'+new URLSearchParams({q:l.address}),{signal:AbortSignal.timeout(10000)});const data=await response.json();if(!response.ok)throw new Error(data.error||'Adressesøket feilet.');
+  const response=await apiFetch('/api/addresses?'+new URLSearchParams({q:l.address}),{signal:AbortSignal.timeout(10000)});const data=await response.json();if(!response.ok)throw new Error(data.error||'Adressesøket feilet.');
   const normalize=s=>s.normalize('NFC').replace(/\s/g,'').toLocaleLowerCase('nb');const exact=(data.adresser||[]).filter(a=>normalize(a.adressetekst)===normalize(l.address));
   if(exact.length!==1)throw new Error('Fant ikke én entydig adresse i Trondheim. Kontroller adressen under Rediger.');
   const p=exact[0].representasjonspunkt;const row={...l,lat:p.lat,lng:p.lon};return await save([row])?row:null;
@@ -48,6 +49,6 @@ export function createListingOverview({getState,commit,openProject,toast,escape,
  ['listing-search','listing-status','listing-kind','listing-sort'].forEach(id=>$('#'+id).addEventListener(id==='listing-search'?'input':'change',render));
  $('#paste-listings').onclick=()=>{$('#listing-import-text').value='';$('#listing-import-dialog').showModal();};$('#close-listing-import').onclick=()=>$('#listing-import-dialog').close();
  $('#listing-import-form').addEventListener('submit',async e=>{e.preventDefault();try{const rows=JSON.parse($('#listing-import-text').value);if(!Array.isArray(rows)||!rows.length||rows.length>5000)throw new Error('Lim inn en JSON-liste med 1–5 000 annonser.');const listings=rows.map(validateListing);if(new Set(listings.map(l=>l.id)).size!==listings.length)throw new Error('Samme FINN-kode forekommer flere ganger i innlimingen.');if(await save(listings)){$('#listing-import-dialog').close();render();toast('Annonsene er lagret på nett.');}}catch(error){toast(error.message,true);}});
- fetch('/data/listings.json').then(r=>{if(!r.ok)throw new Error();return r.json();}).then(data=>{supplied=data.listings.map(validateListing);$('#listing-coverage').textContent=`Datadekning: ${data.coverage} Grunnutvalget ble kontrollert ${data.checkedAt}. Dine egne registreringer vises i tillegg.`;}).catch(()=>{$('#listing-coverage').textContent='Grunnutvalget kunne ikke lastes. Dine lagrede annonser vises fortsatt. Dette er ikke en fullstendig FINN-oversikt.';}).finally(()=>{loaded=true;render();if(location.hash==='#annonser'||!location.hash)activate();});
+ fetch(new URL('./data/listings.json',import.meta.url)).then(r=>{if(!r.ok)throw new Error();return r.json();}).then(data=>{supplied=data.listings.map(validateListing);$('#listing-coverage').textContent=`Datadekning: ${data.coverage} Grunnutvalget ble kontrollert ${data.checkedAt}. Dine egne registreringer vises i tillegg.`;}).catch(()=>{$('#listing-coverage').textContent='Grunnutvalget kunne ikke lastes. Dine lagrede annonser vises fortsatt. Dette er ikke en fullstendig FINN-oversikt.';}).finally(()=>{loaded=true;render();if(location.hash==='#annonser'||!location.hash)activate();});
  return {render,activate};
 }

@@ -8,7 +8,11 @@ export async function passwordHash(password,salt){
  return hex(await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:new TextEncoder().encode(salt),iterations:100000},key,256));
 }
 function equals(a,b){if(typeof a!=='string'||typeof b!=='string'||a.length!==b.length)return false;let d=0;for(let i=0;i<a.length;i++)d|=a.charCodeAt(i)^b.charCodeAt(i);return d===0;}
-function tokenFrom(request){return (request.headers.get('cookie')||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(COOKIE+'='))?.slice(COOKIE.length+1)||'';}
+export function allowedRequestOrigin(request){const origin=request.headers.get('origin');return origin===new URL(request.url).origin||origin==='https://phongtrl.github.io';}
+function tokenFrom(request){
+ const bearer=/^Bearer ([a-f0-9]{64})$/.exec(request.headers.get('authorization')||'');if(bearer)return bearer[1];
+ return (request.headers.get('cookie')||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(COOKIE+'='))?.slice(COOKIE.length+1)||'';
+}
 function cookie(value,age=TTL){return `${COOKIE}=${value}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${age}`;}
 export async function authenticate(request,env){
  if(!env.DB)return null;
@@ -18,7 +22,12 @@ export async function authenticate(request,env){
 async function issueSession(username,version,env){
  const token=hex(crypto.getRandomValues(new Uint8Array(32)));
  await env.DB.prepare('INSERT INTO auth_sessions (token_hash, username, password_version, expires_at) VALUES (?, ?, ?, ?)').bind(await digest(token),username,version,Date.now()+TTL*1000).run();
- return cookie(token);
+ return {token,cookie:cookie(token)};
+}
+async function sessionReply(request,username,version,env,body){
+ const session=await issueSession(username,version,env);
+ const remote=request.headers.get('origin')==='https://phongtrl.github.io';
+ return authReply({...body,...(remote?{sessionToken:session.token}:{})},200,remote?{}:{'Set-Cookie':session.cookie});
 }
 async function credentials(request){
  const type=request.headers.get('content-type')?.toLowerCase()||'';
@@ -46,7 +55,7 @@ export async function handleAuth(request,env){
  }
  if(!['/api/auth/login','/api/auth/logout','/api/auth/password'].includes(path))return authReply({error:'Fant ikke endepunktet.'},404);
  if(request.method!=='POST')return authReply({error:'Metoden er ikke tillatt.'},405);
- if(request.headers.get('origin')!==new URL(request.url).origin)return authReply({error:'Forespørselen må komme fra Kvadrat.'},403);
+ if(!allowedRequestOrigin(request))return authReply({error:'Forespørselen må komme fra Kvadrat.'},403);
  if(path==='/api/auth/logout'){
   const token=tokenFrom(request);if(token)await env.DB.prepare('DELETE FROM auth_sessions WHERE token_hash = ?').bind(await digest(token)).run();
   return authReply({ok:true},200,{'Set-Cookie':cookie('',0)});
@@ -63,7 +72,7 @@ export async function handleAuth(request,env){
   if(!equals(values.username,account.username)||!equals(hash,account.password_hash))return authReply({error:'Feil brukernavn eller passord.'},401);
   await env.DB.prepare('DELETE FROM auth_sessions WHERE expires_at <= ?').bind(Date.now()).run();
   await env.DB.prepare('DELETE FROM auth_attempts WHERE expires_at <= ?').bind(Date.now()).run();
-  return authReply({user:{username:account.username}},200,{'Set-Cookie':await issueSession(account.username,account.password_version,env)});
+  return sessionReply(request,account.username,account.password_version,env,{user:{username:account.username}});
  }
  const user=await authenticate(request,env);if(!user)return authReply({error:'Logg inn for å endre passord.'},401);
  const account=await env.DB.prepare('SELECT password_hash, salt, password_version FROM auth_accounts WHERE username = ?').bind(user.username).first();
@@ -73,5 +82,5 @@ export async function handleAuth(request,env){
  const result=await env.DB.prepare('UPDATE auth_accounts SET password_hash = ?, salt = ?, password_version = ? WHERE username = ? AND password_version = ?').bind(hash,salt,version,user.username,account.password_version).run();
  if(result.meta.changes!==1)return authReply({error:'Passordet ble endret i en annen økt. Logg inn på nytt.'},409);
  await env.DB.prepare('DELETE FROM auth_sessions WHERE username = ? AND password_version < ?').bind(user.username,version).run();
- return authReply({ok:true},200,{'Set-Cookie':await issueSession(user.username,version,env)});
+ return sessionReply(request,user.username,version,env,{ok:true});
 }
