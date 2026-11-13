@@ -117,3 +117,15 @@ Utvikling krever Node.js 24+ og `npm ci`. `npm test` bygger appen og kjører 19 
 `npm run build` produserer `dist/server/index.js` med alle nødvendige nettressurser innebygd, samt manifest og migreringer. Ingen utviklingsserver, lokal database eller lokale filer inngår i brukerflyten. `npm run dev` er en valgfri utviklerforhåndsvisning med en separat testidentitet og testdatabase, som ikke publiseres.
 
 Publisering styres av Sites. GitHub-repoet er kildekoden; Sites bruker sin tilknyttede kilderepo og en arkivpakke av nøyaktig samme commit for produksjon. Behold `.openai/hosting.json` sin prosjekt-ID ved senere oppdateringer. Hemmeligheter skal aldri legges i kildekoden.
+
+## FINN-kandidater uten budsjettgrense
+
+Startsiden «Boliger fra FINN» viser et avgrenset annonseutvalg og dine egne registreringer. Den har kart, fritekstsøk, statusfilter, oppussingsfilter, favoritter og sortering etter totalpris, pris inkl. gjeld per BRA-i, areal og kontrolltidspunkt. Ingen maksimalpris er forhåndsvalgt. Annonser holdes adskilt fra registrerte salg; prisantydninger brukes ikke i salgsstatistikken.
+
+`data/listings.json` inneholder to kandidater funnet gjennom tilgjengelige annonseutdrag, kontrollert 13. november 2026. Status «Annonsert · ubekreftet» garanterer ikke at boligen fortsatt er tilgjengelig. Kartposisjonene er hentet fra Kartverket. Listen er **ikke hele FINN-markedet**, og det finnes ingen automatisk FINN-oppdatering i denne versjonen. Appen markerer dette eksplisitt og lenker til FINNs leilighetssøk for Trondheim.
+
+Direkte henting av FINNs søkeside returnerte 403 med JavaScript-/anti-bot-kontroll i utviklingsmiljøet. Ingen omgåelse er implementert. FINNs dokumenterte API er normalt begrenset til annonsedata man selv eier eller forvalter: https://www.finn.no/api/ og https://hjelpesenter.finn.no/hc/no/articles/22629030477202-API . En komplett løpende markedsoversikt krever en egnet dataleveranse med dekning og bruksrettigheter. En vanlig annonsør-API-nøkkel gir ikke automatisk rett eller tilgang til alle boliger i Trondheim.
+
+På siden kan du lagre annonser med FINN-lenke og opplysninger eller lime inn en JSON-liste. FINN-lenken henter ikke automatisk annonseinnhold. Samme FINN-kode oppdaterer samme kandidat. Egne endringer og favoritter lagres i kontoens skylagring og følger med sikkerhetskopien. Eldre sikkerhetskopier uten `listings` støttes fortsatt.
+
+«Vis på kart» slår opp manglende koordinater hos Kartverket og godtar bare ett eksakt adressetreff. Ukjente posisjoner vises aldri som et vilkårlig sentrumspunkt. «Vurder prosjekt» overfører prisantydning, fellesgjeld og øvrige oppgitte kostnader til prosjektkalkylen. Forventet salg settes lik prisantydning og oppussingsbudsjettet til 0; dette er ikke en lønnsomhetsprognose. Brukeren må sette egne forutsetninger. Annonser markert solgt eller trukket har ikke prosjektknapp aktivert.

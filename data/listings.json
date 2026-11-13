@@ -1,0 +1,9 @@
+{
+  "checkedAt": "2026-11-13",
+  "coverage": "Utvalg fra tilgjengelige FINN-annonser, ikke hele markedet. Ingen automatisk FINN-synkronisering. Annonsestatus og priser må bekreftes hos FINN eller megler.",
+  "source": "https://www.finn.no/api/",
+  "listings": [
+    {"id":"480265636","url":"https://www.finn.no/realestate/homes/ad.html?finnkode=480265636","title":"2-roms med oppussingsbehov og terrasse","address":"Valøyvegen 8","district":"Tempe","area":58,"price":1990000,"debt":165416,"fees":9496,"monthly":7436,"ownership":"borettslag","status":"annonsert","renovation":true,"favorite":false,"notes":"Annonsen beskriver standard fra 2003 og oppussingsbehov. Tilgjengelighet må bekreftes hos megler. Koordinater fra Kartverket.","checkedAt":"2026-11-13","lat":63.40808706491426,"lng":10.394218650591352},
+    {"id":"480264634","url":"https://www.finn.no/realestate/homes/ad.html?finnkode=480264634","title":"4-roms over to plan med oppussingsbehov","address":"Gråtrostvegen 46 F","district":"Kattem","area":97,"price":1990000,"debt":475771,"fees":9496,"monthly":8948,"ownership":"borettslag","status":"annonsert","renovation":true,"favorite":false,"notes":"Annonsen beskriver oppussingsbehov. Oppvarming og varmtvann inngår i felleskostnadene. Tilgjengelighet må bekreftes hos megler. Koordinater fra Kartverket.","checkedAt":"2026-11-13","lat":63.348649243055476,"lng":10.34041914276069}
+  ]
+}
