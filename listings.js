@@ -23,7 +23,14 @@ export function createListingOverview({getState,commit,openProject,toast,escape,
   const placed=rows.filter(l=>l.lat!==null&&l.lng!==null).length;$('#listing-map-count').textContent=`${placed} av ${rows.length} kandidater har kartposisjon`;
  }
  function activate(){
-  if(!listingMap&&window.L){listingMap=L.map('listing-map',{scrollWheelZoom:false}).setView([63.40,10.40],11);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(listingMap);layers=L.layerGroup().addTo(listingMap);render();}
+  const element=$('#listing-map');
+  if(!element.clientWidth||!element.clientHeight)return;
+  if(!window.L){$('#listing-map-error').textContent='Kartbiblioteket kunne ikke lastes. Prøv å laste kartet på nytt.';$('#listing-map-error').hidden=false;$('#retry-listing-map').hidden=false;return;}
+  if(!listingMap&&window.L){listingMap=L.map('listing-map',{scrollWheelZoom:false}).setView([63.40,10.40],11);const tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,referrerPolicy:'origin',attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(listingMap);layers=L.layerGroup().addTo(listingMap);
+   let failures=0;tiles.on('tileerror',()=>{if(++failures>=3){$('#listing-map-error').textContent='Bakgrunnskartet kunne ikke lastes. Kandidatlisten er fortsatt tilgjengelig.';$('#listing-map-error').hidden=false;$('#retry-listing-map').hidden=false;}});tiles.on('tileload',()=>{failures=0;$('#listing-map-error').hidden=true;$('#retry-listing-map').hidden=true;});
+   $('#retry-listing-map').onclick=()=>{activate();tiles.redraw();};
+   if(window.ResizeObserver)new ResizeObserver(()=>{if(element.clientWidth&&element.clientHeight)listingMap.invalidateSize({animate:false});}).observe(element);
+   render();}
   if(listingMap)setTimeout(()=>listingMap.invalidateSize(),50);
  }
  function edit(l=null){editing=l;const form=$('#listing-form');form.reset();if(l)for(const [key,value]of Object.entries(l)){const field=form.elements.namedItem(key);if(field){if(field.type==='checkbox')field.checked=!!value;else field.value=value??'';}}$('#listing-dialog').showModal();}
@@ -34,6 +41,8 @@ export function createListingOverview({getState,commit,openProject,toast,escape,
   if(exact.length!==1)throw new Error('Fant ikke én entydig adresse i Trondheim. Kontroller adressen under Rediger.');
   const p=exact[0].representasjonspunkt;const row={...l,lat:p.lat,lng:p.lon};return await save([row])?row:null;
  }
+ $('#retry-listing-map').onclick=()=>{if(!window.L)location.reload();else activate();};
+ window.addEventListener('load',()=>{if(location.hash==='#annonser'||!location.hash)activate();});
  $('#add-listing').onclick=()=>edit();$('#close-listing').onclick=()=>$('#listing-dialog').close();
  $('#listing-form').addEventListener('submit',async e=>{e.preventDefault();try{const form=$('#listing-form'),values=Object.fromEntries(new FormData(form));const same=editing?.address===values.address;const row=validateListing({...values,checkedAt:values.checkedAt||null,renovation:form.elements.renovation.checked,favorite:editing?.favorite||false,lat:same?editing.lat:null,lng:same?editing.lng:null});if(await save([row])){$('#listing-dialog').close();render();toast('Annonsen er lagret på nett.');}}catch(error){toast(error.message,true);}});
  $('#listing-table').addEventListener('click',async e=>{

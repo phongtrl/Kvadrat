@@ -111,13 +111,18 @@ function renderInsight(){
   $('#insight-panel').innerHTML=`<div class="insight-label">OMRÅDEINNSIKT ${icon('spark')}</div><div class="area-heading"><span class="area-icon">${icon('pin')}</span><div><h2>${escape(title)}</h2><small>${f.district?'Trondheim kommune':'Trøndelag · kommune 5001'}</small></div></div><div class="insight-rows"><div class="insight-row"><span>Salg i utvalget</span><strong>${filtered.length} boliger</strong></div><div class="insight-row"><span>Median pris / m²</span><strong>${num(median(filtered.map(s=>s.price/s.area)))} kr</strong></div><div class="insight-row"><span>Gj.snittlig størrelse</span><strong>${num(average)} m²</strong></div><div class="insight-row"><span>Datagrunnlag</span><strong>${filtered.some(s=>s.demo)?'Inkl. eksempeldata':filtered.length?'Importerte salg':'Ingen salg'}</strong></div></div><div class="mini-chart"><div class="mini-chart-label"><span>Median m²-pris per måned</span><span>Utvalget</span></div>${sparkline(filtered)}</div><p class="insight-note">Et utvalg, ikke hele markedet. Små utvalg og ulik boligstandard kan gi store utslag.</p><a class="button light" href="#analyse">Se markedsanalyse ${icon('arrow')}</a>`;
 }
 function initMap(){
+  const element=$('#map');
+  if(!ready||!element.clientWidth||!element.clientHeight)return;
+  if(map){map.invalidateSize({animate:false});return;}
   if(!window.L){$('#map-failure').hidden=false;return;}
   map=L.map('map',{zoomControl:false,scrollWheelZoom:false}).setView([63.431,10.408],13);
   L.control.zoom({position:'topright'}).addTo(map);
-  const tiles=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(map);
+  const tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,referrerPolicy:'origin',attribution:'© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(map);
   let tileErrors=0;tiles.on('tileerror',()=>{if(++tileErrors>=5){$('#map-failure').textContent='Bakgrunnskartet er utilgjengelig. Salgspunkter, listevisning og kalkyler kan fortsatt brukes.';$('#map-failure').hidden=false;}});tiles.on('tileload',()=>{$('#map-failure').hidden=true;tileErrors=0;});
   markerGroup=L.layerGroup().addTo(map);
   $('#map-home').onclick=()=>{map.setView([63.431,10.408],13);map.invalidateSize();};
+  if(window.ResizeObserver)new ResizeObserver(()=>{if(element.clientWidth&&element.clientHeight)map.invalidateSize({animate:false});}).observe(element);
+  renderMarkers();
 }
 function renderMarkers(){
   if(!markerGroup)return;markerGroup.clearLayers();
@@ -128,7 +133,7 @@ function renderMarkers(){
   if(filtered.length>500)toast('Kartet viser de 500 nyeste salgene. Listen og analysen inkluderer hele utvalget.');
 }
 function selectSale(id,fly=true){selectedId=id;if($('#map-layout').classList.contains('list-only'))setMapView(true);renderMarkers();renderInsight();const s=filtered.find(x=>x.id===id);if(map&&s&&fly){map.setView([s.lat,s.lng],15);$('#map-layout').scrollIntoView({behavior:'smooth',block:'center'});}}
-function setMapView(show){$('#map-layout').classList.toggle('list-only',!show);$('#map-view').classList.toggle('active',show);$('#list-view').classList.toggle('active',!show);$('#map-view').setAttribute('aria-pressed',show);$('#list-view').setAttribute('aria-pressed',!show);if(show&&map)setTimeout(()=>map.invalidateSize(),50);}
+function setMapView(show){$('#map-layout').classList.toggle('list-only',!show);$('#map-view').classList.toggle('active',show);$('#list-view').classList.toggle('active',!show);$('#map-view').setAttribute('aria-pressed',show);$('#list-view').setAttribute('aria-pressed',!show);if(show&&currentPage==='marked'){initMap();if(map)setTimeout(()=>map.invalidateSize(),50);}}
 
 function renderProjects(){
   $('#project-count').textContent=state.projects.length;const sums=state.projects.map(calculate);const active=state.projects.filter(p=>p.status!=='Solgt').length;
@@ -144,7 +149,7 @@ function renderAnalysis(){
 }
 function renderData(){const n=state.sales.filter(s=>s.demo).length;$('#dataset-summary').textContent=`${state.sales.length} salg totalt · ${n} eksempeldata · ${state.sales.length-n} importerte salg · ${state.projects.length} prosjekter.`;$('#remove-demo').disabled=!n;$('#restore-demo').disabled=demoSales.length>0&&demoSales.every(s=>state.sales.some(x=>x.id===s.id));}
 function renderAll(){listingUI?.render();refreshAreaOptions();renderMarket();renderProjects();renderData();if(currentPage==='analyse')renderAnalysis();}
-function route(){const names={annonser:'Boliger fra FINN',marked:'Markedskart',prosjekter:'Mine prosjekter',analyse:'Markedsanalyse',datakilder:'Data og import'};currentPage=location.hash.slice(1);if(!names[currentPage])currentPage='annonser';$$('.page').forEach(el=>el.hidden=el.id!==`page-${currentPage}`);$$('nav a').forEach(el=>{el.classList.toggle('active',el.dataset.page===currentPage);if(el.dataset.page===currentPage)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');});$('#breadcrumb-title').textContent=names[currentPage];if(currentPage==='annonser')listingUI?.activate();if(currentPage==='analyse')renderAnalysis();if(currentPage==='marked'&&map)setTimeout(()=>map.invalidateSize(),50);}
+function route(){const names={annonser:'Boliger fra FINN',marked:'Markedskart',prosjekter:'Mine prosjekter',analyse:'Markedsanalyse',datakilder:'Data og import'};currentPage=location.hash.slice(1);if(!names[currentPage])currentPage='annonser';$$('.page').forEach(el=>el.hidden=el.id!==`page-${currentPage}`);$$('nav a').forEach(el=>{el.classList.toggle('active',el.dataset.page===currentPage);if(el.dataset.page===currentPage)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');});$('#breadcrumb-title').textContent=names[currentPage];if(currentPage==='annonser')listingUI?.activate();if(currentPage==='analyse')renderAnalysis();if(currentPage==='marked'){initMap();if(map)setTimeout(()=>map.invalidateSize(),50);}}
 
 function formProject(){const values=Object.fromEntries(new FormData($('#project-form')));for(const field of NUMERIC_FIELDS)values[field]=Number(values[field]);return {...values,id:$('#project-id').value||crypto.randomUUID(),expenses:editingExpenses,tasks:editingTasks};}
 function openProject(id,prefill={}){
@@ -254,7 +259,7 @@ $('#password-form').addEventListener('submit',async e=>{e.preventDefault();const
 async function init(){
   $('main').inert=true;
   try{const r=await fetch(new URL('./data/demo-sales.json',import.meta.url));if(r.ok)demoSales=validateSales(await r.json(),true);}catch{}
-  initMap();route();setMapView(true);await loadWorkspace();
+  route();setMapView(true);await loadWorkspace();
 }
 $('#login-form').dataset.ready='true';$('#login-submit').disabled=false;
 listingUI=createListingOverview({getState:()=>state,commit,openProject,toast,escape,kr,num,stat});

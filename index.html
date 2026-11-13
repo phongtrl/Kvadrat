@@ -2,7 +2,7 @@
 <html lang="nb">
 <head>
   <meta charset="UTF-8">
-  <meta name="referrer" content="no-referrer">
+  <meta name="referrer" content="strict-origin">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#203e36">
   <meta name="description" content="Kvadrat – arbeidsverktøy for eiendomsutvikling, markedsanalyse og prosjektøkonomi i Trondheim.">
@@ -36,7 +36,7 @@
 <div class="data-actions" style="margin-bottom:20px"><a class="button primary" href="https://www.finn.no/realestate/homes/search.html?location=1.20016.20318&amp;property_type=3" target="_blank" rel="noopener">Åpne leilighetssøket på FINN ↗</a><button class="button light" id="paste-listings">Lim inn annonsedata</button><span class="pill warm">FINN-synkronisering er ikke tilkoblet</span></div>
 <div id="listing-stats" class="stats-grid"></div>
 <div class="listing-filters"><label>Søk adresse eller område<input id="listing-search" type="search" placeholder="Alle områder i Trondheim"></label><label>Status<select id="listing-status"><option value="">Alle statuser</option><option value="annonsert">Annonsert – tilgjengelighet ubekreftet</option><option value="ukjent">Ukjent</option><option value="solgt">Merket solgt</option><option value="trukket">Trukket</option></select></label><label>Vis<select id="listing-kind"><option value="">Alle kandidater</option><option value="renovation">Oppussingsbehov</option><option value="favorites">Mine favoritter</option></select></label><label>Sorter<select id="listing-sort"><option value="checked">Kontrolldato, nyeste først</option><option value="total">Totalpris, laveste først</option><option value="sqm">Pris inkl. gjeld / m², laveste først</option><option value="area">Areal, største først</option></select></label></div>
-<div class="panel" style="margin-bottom:20px"><div class="section-heading" style="margin-top:0"><h2>Annonsekart</h2><span id="listing-map-count" class="small-copy"></span></div><div id="listing-map" aria-label="Kart over registrerte FINN-kandidater"></div></div>
+<div class="panel" style="margin-bottom:20px"><div class="section-heading" style="margin-top:0"><h2>Annonsekart</h2><span id="listing-map-count" class="small-copy"></span></div><p id="listing-map-error" class="small-copy" role="status" hidden></p><button id="retry-listing-map" class="text-button" hidden>Last kart på nytt</button><div id="listing-map" aria-label="Kart over registrerte FINN-kandidater"></div></div>
 <div class="table-wrap"><table><thead><tr><th>Bolig / område</th><th>BRA-i</th><th>Prisantydning</th><th>Fellesgjeld</th><th>Totalpris inkl. omk.</th><th>Felleskost./mnd.</th><th>Status / kontroll</th><th>Handlinger</th></tr></thead><tbody id="listing-table"></tbody></table><div class="empty-state" id="listing-empty" hidden>Ingen kandidater matcher filtrene.</div></div><p class="small-copy">Annonser inngår ikke i salgsstatistikken. Totalpris = prisantydning + fellesgjeld + oppgitte omkostninger. Priser er ikke oppnådde salgspriser.</p>
 </section>
       <section id="page-marked" class="page">

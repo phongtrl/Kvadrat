@@ -12,7 +12,7 @@ test('login cannot serialize username or password into a native GET URL, even wi
  const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
  const form=html.match(/<form\b[^>]*id="login-form"[\s\S]*?<\/form>/)[0];
  assert.match(form,/method="post"/);assert.doesNotMatch(form,/name="(?:username|password)"/);assert.match(form,/id="login-submit"[^>]*disabled/);
- assert.match(html,/<meta name="referrer" content="no-referrer">/);
+ assert.match(html,/<meta name="referrer" content="strict-origin">/);
  const boot=readFileSync(new URL('../boot.js',import.meta.url),'utf8');assert.doesNotMatch(boot,/location\.(?:replace|assign)\(/);
 });
 test('GitHub client sends requests to cloud API and keeps session secrets out of URLs',async()=>{
