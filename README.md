@@ -1,22 +1,12 @@
 # Kvadrat · Eiendomsutvikling i Trondheim
 
-Førsteversjon av et lokalt verktøy for å undersøke oppussingsobjekter og følge prosjektøkonomi. Laget med HTML, CSS, JavaScript og JSON. Ingen npm-pakker eller byggetrinn er nødvendig. Leaflet følger med i `vendor/`.
+Nettbasert verktøy for å undersøke oppussingsobjekter og følge prosjektøkonomi. Grensesnittet er HTML, CSS og JavaScript. En Cloudflare Worker håndterer signert tilgang, adressesøk og skylagring. Leaflet følger med i `vendor/`.
 
-## Legg filene i Windows-mappen din
+## Åpne Kvadrat på nett
 
-1. Pakk ut **innholdet** i prosjektets ZIP-fil til:
-   `C:\Users\phong\Documents\Projects Visual Code\Eiendomsutvikling`
-2. `index.html`, `app.js`, `start.bat` og de øvrige filene skal ligge direkte i denne mappen.
-3. Installer Node.js LTS fra https://nodejs.org hvis det ikke allerede finnes på PC-en.
-4. Dobbeltklikk `start.bat`, og åpne http://localhost:3000 i nettleseren. Hold terminalvinduet åpent.
+Kvadrat brukes som en privat nettside. Åpne den publiserte lenken og logg inn med ChatGPT. Det kreves ingen lokal installasjon, server, Node.js eller filer for vanlig bruk. Prosjekter, oppgaver, oppussingskostnader og salgsdata lagres i en hosted Cloudflare D1-database og følger den innloggede kontoen på tvers av enheter.
 
-Du kan også åpne mappen i Visual Studio Code, starte en terminal og kjøre:
-
-```powershell
-node server.mjs
-```
-
-Ikke åpne `index.html` med dobbeltklikk. Nettleseren trenger HTTP for JavaScript-moduler og JSON. Som alternativ til Node kan du bruke `py -m http.server 3000 --bind 127.0.0.1` fra prosjektmappen. Bruk samme adresse og port hver gang for å finne igjen nettleserlagrede data.
+Du kan registrere salg i skjemaet under «Data og import», finne adressekoordinater med Kartverket eller lime inn CSV/JSON direkte på siden. Filimport, eksport og nedlasting av sikkerhetskopi er valgfrie tilleggsfunksjoner.
 
 ## Dette er med
 
@@ -28,7 +18,9 @@ Ikke åpne `index.html` med dobbeltklikk. Nettleseren trenger HTTP for JavaScrip
 - Prosjektkalkyle med dokumentavgift, oppussingsbuffer, finansiering, salgsomkostninger og løpende utgifter.
 - Prosjektstatus, notater, faktiske oppussingskostnader og oppgaveliste.
 - Scenarioanalyse ved ±5 % endring i forventet salgspris.
-- Lokal lagring, eksport av salgsutvalg og sikkerhetskopiering/gjenoppretting av hele arbeidsområdet.
+- Privat skylagring knyttet til ChatGPT-innlogging, eksport av salgsutvalg og valgfri sikkerhetskopiering.
+- Registrer salg og lim inn CSV/JSON direkte på siden.
+- Versjonskontroll som stopper gamle faner fra å overskrive nyere endringer.
 
 ## Datagrunnlag: ekte adresser, fiktive eksempelsalg
 
@@ -42,9 +34,9 @@ Siden beskriver blant annet adresser, bygningspunkt, eiendomsteiger og administr
 Integrert adresse-API:
 `https://ws.geonorge.no/adresser/v1/sok?sok=...&kommunenummer=5001`
 
-Bakgrunnskart: © OpenStreetMap contributors, https://www.openstreetmap.org/copyright. Adressesøk og bakgrunnskart krever internett. Søketeksten sendes til Kartverkets adresse-API; OpenStreetMap mottar forespørsler for kartflisene du ser. Skrifttyper lastes fra Google Fonts, med systemskrift som reserve. Prosjekter og salgsdata lastes ikke opp til noen server av denne applikasjonen.
+Bakgrunnskart: © OpenStreetMap contributors, https://www.openstreetmap.org/copyright. Adressesøk og bakgrunnskart krever internett. Søketeksten sendes til Kartverkets adresse-API; OpenStreetMap mottar forespørsler for kartflisene du ser. Skrifttyper lastes fra Google Fonts, med systemskrift som reserve. Prosjekter og salgsdata sendes til Kvadrats private API og lagres i D1 under kontoens bruker-ID. Adressesøket går gjennom Kvadrats server til Kartverkets API.
 
-Eiendomsgrenser, bygninger, automatisk salgsinnhenting, samarbeid, skybasert database og innlogging er ikke implementert i denne versjonen.
+Eiendomsgrenser, bygninger, automatisk salgsinnhenting og delte prosjektarbeidsområder er ikke implementert i denne versjonen. Innlogging og privat skybasert database er implementert.
 
 ## Importformat
 
@@ -94,26 +86,46 @@ Fellesgjeld vises i kjøpets totalpris, men forutsettes overtatt uendret av nest
 
 Sett dokumentavgiftsgrunnlaget til riktig avgiftsgrunnlag (0 ved fritak). Andre gebyrer, tilvalg, skatt, eventuell merverdiavgift, lånegebyrer og uforutsette utgifter må inkluderes der de er relevante. «Solgt»-status bruker fortsatt kalkylens salgspris, ikke en separat regnskapsavslutning.
 
-## Lagring og sikkerhetskopiering
+## Skylagring og tilgang
 
-Data lagres i nettleserens `localStorage` under nøkkelen `kvadrat-workspace-v1`. Dette er ikke en delt database. Sletting av nettleserdata, en annen nettleser, inkognitomodus eller en annen port kan gjøre at arbeidsområdet ser tomt ut. Sikkerhetskopi lagres som JSON og kan importeres under «Data og import»; gjenoppretting erstatter gjeldende data etter bekreftelse. Flere faner oppdaterer oversikten når en annen fane lagrer, men samtidig redigering av samme prosjekt har ingen konfliktløsning.
+Sites håndterer ChatGPT-innlogging og privat tilgang. API-et krever `oai-authenticated-user-id` fra plattformen, og alle databaseoperasjoner avgrenses med denne ID-en. Klienten kan ikke angi eller bytte eier-ID. E-post brukes bare til visning. Utviklingsidentitet finnes utelukkende i en separat utviklingsadapter som ikke inngår i produksjonsbygget.
 
-## Filer og kontroll
+`GET /api/workspace` henter eller oppretter kontoens arbeidsområde med fiktive eksempelsalg. `PUT /api/workspace` validerer alle data før en atomisk oppdatering. Oppdateringer krever riktig Origin, JSON og en `If-Match`-versjon. Ved samtidige endringer får den gamle versjonen HTTP 409. Siden ber deg hente siste versjon før du lagrer videre, og beholder skjemaet ved mislykket lagring. Bekreftet lagring vises som «Lagret på nett». Ingen prosjektdata skrives til `localStorage` eller IndexedDB.
+
+Den samme kontoen ser lagrede data fra andre enheter. Bruk «Hent siste versjon» for å hente endringer; oversikten oppdateres også når fanen får fokus, så lenge du ikke redigerer et skjema. Dette er ikke samtidig samskriving.
+
+Valgfri sikkerhetskopi kan eksporteres og gjenopprettes i nettleseren. Gjenoppretting erstatter gjeldende arbeidsområde etter bekreftelse. Eksisterende data fra versjon 1 kan flyttes med sikkerhetskopi-import; det gamle localhost-arbeidsområdet kan ikke leses fra den nye nettdomenen.
+
+Maksimalt lagret arbeidsområde er 1 800 000 UTF-8-byte. API-et avviser større oppdateringer uten å endre data. De opprinnelige grensene på 5 000 salg og 5 MB per importfil gjelder i tillegg. De faktiske grensene avhenger dermed også av notat- og tekstlengder.
+
+## Arkitektur og utvikling
 
 ```text
-index.html           Grensesnitt
-styles.css           Design og responsiv tilpasning
-app.js               Kart, visninger, prosjekter, import og lokal lagring
-core.js              Beregninger og validering
-data/demo-sales.json Fiktive eksempeldata
-vendor/              Leaflet 1.9.4 med lisens
-server.mjs           Lokal HTTP-server uten avhengigheter
-start.bat            Windows-startfil
-tests/core.test.mjs  Tester for økonomi og dataimport
+index.html / styles.css / app.js   Nettgrensesnitt med sky-API
+core.js                            Delt validering og økonomiberegning
+worker/index.js                    Autentisert API og statiske ressurser
+.openai/hosting.json                Sites-ID og D1-binding
+db/schema.js                       Databaseskjema (Drizzle)
+drizzle/                           Versjonerte SQL-migreringer og metadata
+scripts/build.mjs                  Pakker HTML/JS/CSS og Worker uten runtime-avhengigheter
+scripts/dev-server.mjs             Kun for utviklere, aldri i hosted Worker
+tests/                             Økonomi-, import- og API-tester
 ```
 
-Kjør `npm test` eller `node --test tests/core.test.mjs` for å kontrollere økonomiske beregninger, datavalidering, import og sikkerhetskopiformat. Node.js 20+ anbefales.
+Utvikling krever Node.js 24+ og `npm ci`. `npm test` bygger appen og kjører 19 tester med en ekte SQLite-database i minnet. Testene kontrollerer blant annet kontoisolasjon, påloggingskrav, Origin, datavalidering, varig lagring og samtidige oppdateringer. `npm run db:generate` genererer schema-only-migreringer fra Drizzle-skjemaet. Hosted migreringer skal brukes av publiseringsflyten; tabeller opprettes aldri under API-kall.
 
-## Verifisering i utviklingsmiljøet
+`npm run build` produserer `dist/server/index.js` med alle nødvendige nettressurser innebygd, samt manifest og migreringer. Ingen utviklingsserver, lokal database eller lokale filer inngår i brukerflyten. `npm run dev` er en valgfri utviklerforhåndsvisning med en separat testidentitet og testdatabase, som ikke publiseres.
 
-9 automatiserte tester består. Lokal HTTP-server, MIME-typer, filreferanser og HTML-ID-er er kontrollert. Adresse-API-et har svart med adresser og koordinater for Trondheim. Visuell nettlesertest kunne ikke fullføres fordi miljøets forhåndsvisningsforbindelse (relay til nettleserporten) ikke startet. Ingen fullført nettleserverifisering er dermed gjort.
+Publisering styres av Sites. GitHub-repoet er kildekoden; Sites bruker sin tilknyttede kilderepo og en arkivpakke av nøyaktig samme commit for produksjon. Behold `.openai/hosting.json` sin prosjekt-ID ved senere oppdateringer. Hemmeligheter skal aldri legges i kildekoden.
+
+## FINN-kandidater uten budsjettgrense
+
+Startsiden «Boliger fra FINN» viser et avgrenset annonseutvalg og dine egne registreringer. Den har kart, fritekstsøk, statusfilter, oppussingsfilter, favoritter og sortering etter totalpris, pris inkl. gjeld per BRA-i, areal og kontrolltidspunkt. Ingen maksimalpris er forhåndsvalgt. Annonser holdes adskilt fra registrerte salg; prisantydninger brukes ikke i salgsstatistikken.
+
+`data/listings.json` inneholder to kandidater funnet gjennom tilgjengelige annonseutdrag, kontrollert 13. november 2026. Status «Annonsert · ubekreftet» garanterer ikke at boligen fortsatt er tilgjengelig. Kartposisjonene er hentet fra Kartverket. Listen er **ikke hele FINN-markedet**, og det finnes ingen automatisk FINN-oppdatering i denne versjonen. Appen markerer dette eksplisitt og lenker til FINNs leilighetssøk for Trondheim.
+
+Direkte henting av FINNs søkeside returnerte 403 med JavaScript-/anti-bot-kontroll i utviklingsmiljøet. Ingen omgåelse er implementert. FINNs dokumenterte API er normalt begrenset til annonsedata man selv eier eller forvalter: https://www.finn.no/api/ og https://hjelpesenter.finn.no/hc/no/articles/22629030477202-API . En komplett løpende markedsoversikt krever en egnet dataleveranse med dekning og bruksrettigheter. En vanlig annonsør-API-nøkkel gir ikke automatisk rett eller tilgang til alle boliger i Trondheim.
+
+På siden kan du lagre annonser med FINN-lenke og opplysninger eller lime inn en JSON-liste. FINN-lenken henter ikke automatisk annonseinnhold. Samme FINN-kode oppdaterer samme kandidat. Egne endringer og favoritter lagres i kontoens skylagring og følger med sikkerhetskopien. Eldre sikkerhetskopier uten `listings` støttes fortsatt.
+
+«Vis på kart» slår opp manglende koordinater hos Kartverket og godtar bare ett eksakt adressetreff. Ukjente posisjoner vises aldri som et vilkårlig sentrumspunkt. «Vurder prosjekt» overfører prisantydning, fellesgjeld og øvrige oppgitte kostnader til prosjektkalkylen. Forventet salg settes lik prisantydning og oppussingsbudsjettet til 0; dette er ikke en lønnsomhetsprognose. Brukeren må sette egne forutsetninger. Annonser markert solgt eller trukket har ikke prosjektknapp aktivert.

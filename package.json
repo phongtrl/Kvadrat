@@ -1,12 +1,19 @@
 {
   "name": "kvadrat-eiendomsutvikling",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "Lokal markedsoversikt og prosjektøkonomi for eiendomsutvikling i Trondheim",
+  "description": "Nettbasert markedsoversikt og privat prosjektøkonomi for eiendomsutvikling i Trondheim",
   "scripts": {
-    "dev": "node server.mjs",
-    "start": "node server.mjs",
-    "test": "node --test tests/core.test.mjs"
+    "dev": "node scripts/build.mjs && node scripts/dev-server.mjs",
+    "start": "node scripts/build.mjs && node scripts/dev-server.mjs",
+    "build": "node scripts/build.mjs",
+    "pretest": "npm run build",
+    "test": "node --test tests/*.test.mjs",
+    "db:generate": "drizzle-kit generate"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.10",
+    "drizzle-orm": "^0.45.2"
   }
 }

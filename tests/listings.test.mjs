@@ -1,0 +1,11 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {validateListing,validateBackup} from '../core.js';
+const seed=JSON.parse(readFileSync(new URL('../data/listings.json',import.meta.url))).listings;
+const base={schemaVersion:1,sales:[],projects:[]};
+test('annonsegrunnlaget er ekte kandidater med kilde og eksplisitt kontrolldato',()=>{assert.equal(seed.length,2);for(const row of seed){const valid=validateListing(row);assert.equal(valid.id,row.id);assert.equal(valid.checkedAt,'2026-11-13');assert.equal(valid.status,'annonsert');assert.ok(valid.lat&&valid.lng);}});
+test('annonser holdes adskilt fra salg og bevares i sikkerhetskopi',()=>{const restored=validateBackup({...base,listings:seed});assert.equal(restored.sales.length,0);assert.equal(restored.listings.length,2);assert.equal(restored.listings[0].price,1990000);assert.deepEqual(validateBackup(base),base);});
+test('FINN-lenker normaliseres og ukjente verter og ugyldige lenker avvises',()=>{for(const url of ['https://evil.test/?finnkode=480265636','javascript:alert(1)','https://finn.no.evil.test/realestate/homes/ad.html?finnkode=480265636','https://www.finn.no/realestate/homes/advertisement?finnkode=480265636','https://www.finn.no/realestate/homes/ad.html?finnkode=x'])assert.throws(()=>validateListing({...seed[0],url}));const l=validateListing({...seed[0],url:'https://finn.no/realestate/homes/ad/480265636?tracking=abc'});assert.equal(l.url,seed[0].url);});
+test('annonsedata valideres før skyoppdatering uten å gi ukjente kartpunkter en standardposisjon',()=>{assert.equal(validateListing({...seed[0],lat:null,lng:null}).lat,null);for(const patch of [{price:-1},{area:0},{debt:-1},{status:'ledig'},{lat:59.9},{checkedAt:'2026-02-30'}])assert.throws(()=>validateListing({...seed[0],...patch}));assert.throws(()=>validateBackup({...base,listings:[seed[0],seed[0]]}),/Dupliserte/);});
+test('favoritter, notater og solgt-status overlever sikkerhetskopiering',()=>{const result=validateBackup({...base,listings:[{...seed[0],favorite:true,status:'solgt',notes:'Kontrollert med megler'}]});assert.equal(result.listings[0].favorite,true);assert.equal(result.listings[0].status,'solgt');assert.equal(result.listings[0].notes,'Kontrollert med megler');});
