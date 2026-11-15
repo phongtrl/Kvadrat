@@ -51,7 +51,7 @@ export function createListingOverview({getState,commit,openProject,toast,escape,
   try{
    if(button.dataset.favorite){if(await save([{...l,favorite:!l.favorite}]))render();}
    else if(button.dataset.editListing)edit(l);
-   else {button.disabled=true;const placed=await locate(l);if(!placed)return;render();if(button.dataset.locateListing){activate();listingMap?.setView([placed.lat,placed.lng],16);$('#listing-map').scrollIntoView({behavior:'smooth',block:'center'});}
+   else {button.disabled=true;const placed=await locate(l);if(!placed)return;render();if(button.dataset.locateListing){$('#listing-map-disclosure').open=true;activate();listingMap?.setView([placed.lat,placed.lng],16);$('#listing-map').scrollIntoView({behavior:'smooth',block:'center'});}
    else openProject(null,{name:l.address,address:l.address,area:l.area,lat:placed.lat,lng:placed.lng,purchase:l.price,debt:l.debt,resale:l.price,ownership:l.ownership,monthly:l.monthly,stampBase:l.ownership==='selveier'?l.price:0,buyFees:l.ownership==='selveier'?Math.max(0,l.fees-l.price*.025):l.fees,renovation:0,notes:`FINN-kandidat: ${l.url}\n${l.notes}\nPrisantydning er ikke oppnådd pris. Forventet salg er satt lik prisantydning; oppussingsbudsjett er 0. Vurder og erstatt alle økonomiske forutsetninger. Kontroller omkostninger og fellesgjeld før bruk.`});}
   }catch(error){toast(error.message,true);}finally{button.disabled=false;}
  });

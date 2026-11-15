@@ -35,6 +35,6 @@ test('property map fits project and property positions and keeps overlapping rec
  assert.equal(markers.length,2);assert.deepEqual(fitted,[[63.4,10.4],[63.4,10.4],[64.015,11.495]]);
  assert.match(markers[0].options.icon.html,/price-marker.*Adresse/);assert.equal(markers[0].options.title,'Adresse');assert.equal(markers[0].options.keyboard,true);const flatten=node=>[node,...(node.children||[]).flatMap(flatten)];const popupNodes=flatten(markers[0].popup);assert.ok(popupNodes.some(n=>n.textContent==='Adresse'));assert.ok(popupNodes.some(n=>n.className==='property-popup-address'));
  assert.ok(popupNodes.some(n=>n.textContent?.includes('Estimert fortjeneste før skatt')));
- const actions=popupNodes.filter(n=>n.type==='button');assert.equal(actions.length,3);actions[0].onclick();assert.equal(opened,'p1');
+ const actions=popupNodes.filter(n=>n.type==='button');assert.equal(actions.length,4);actions[0].onclick();assert.equal(opened,'p1');
  element('#property-filter').value='historisk';ui.render();assert.equal(markers.length,1);assert.deepEqual(markers[0].point,[64.015,11.495]);
 });
