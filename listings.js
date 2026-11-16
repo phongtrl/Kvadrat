@@ -3,7 +3,7 @@ import {validateListing} from './core.js';
 
 export function createListingOverview({getState,commit,openProject,toast,escape,kr,num,stat}){
  const $=s=>document.querySelector(s);
- let supplied=[],listingMap,layers,editing=null,loaded=false;
+ let supplied=[],listingMap,layers,editing=null,loaded=false,selectedMapId=null;const mapMarkers=new Map();
  const statuses={annonsert:'Annonsert · ubekreftet',ukjent:'Ukjent',solgt:'Merket solgt',trukket:'Trukket'};
  const all=()=>{const rows=new Map(supplied.map(l=>[l.id,l]));for(const row of getState().listings||[])rows.set(row.id,row);return [...rows.values()];};
  const total=l=>l.price+l.debt+l.fees;
@@ -16,10 +16,20 @@ export function createListingOverview({getState,commit,openProject,toast,escape,
   $('#listing-stats').innerHTML=stat('Kandidater i utvalget',num(rows.length),'annonser','Registrerte annonser, ikke hele markedet','building')+stat('Oppussingsbehov oppgitt',num(rows.filter(l=>l.renovation).length),'annonser','Basert på annonsetekst / registrering','spark')+stat('Mine favoritter',num(rows.filter(l=>l.favorite).length),'kandidater','Lagres privat på kontoen din','folder')+stat('Prisavgrensning','Ingen','maksgrense','Alle prisklasser er inkludert','coins');
   $('#listing-table').innerHTML=rows.map(l=>`<tr><td><strong>${escape(l.address)}</strong><br><small>${escape(l.district)} · ${escape(l.title)}</small>${l.renovation?'<br><span class="pill green">Oppussingsbehov</span>':''}</td><td>${num(l.area)} m²</td><td>${kr(l.price)}</td><td>${kr(l.debt)}</td><td class="money">${kr(total(l))}<br><small>${num((l.price+l.debt)/l.area)} kr/m² ekskl. omk.</small></td><td>${kr(l.monthly)}</td><td><span class="pill ${l.status==='solgt'?'warm':''}">${statuses[l.status]}</span><br><small>${l.checkedAt?escape(l.checkedAt):'Ikke kontrollert'}</small></td><td><div class="listing-actions"><button class="text-button" data-favorite="${l.id}" aria-label="${l.favorite?'Fjern favoritt':'Lagre favoritt'} ${escape(l.address)}">${l.favorite?'★ Favoritt':'☆ Favoritt'}</button><a class="text-link" href="${escape(l.url)}" target="_blank" rel="noopener">FINN ↗</a><button class="text-button" data-edit-listing="${l.id}">Rediger</button><button class="text-button" data-locate-listing="${l.id}">Vis på kart</button><button class="button light" data-listing-project="${l.id}" ${['solgt','trukket'].includes(l.status)?'disabled':''}>Vurder prosjekt</button></div></td></tr>`).join('');
   $('#listing-empty').hidden=rows.length>0;
-  if(listingMap){layers.clearLayers();for(const l of rows.filter(l=>l.lat!==null&&l.lng!==null)){
+  if(listingMap){layers.clearLayers();mapMarkers.clear();for(const l of rows.filter(l=>l.lat!==null&&l.lng!==null)){
     const marker=L.circleMarker([l.lat,l.lng],{radius:8,color:l.status==='solgt'?'#b28b63':'#284f3f',fillOpacity:.8}).addTo(layers);
-    const popup=document.createElement('div');const strong=document.createElement('strong');strong.textContent=l.address;popup.append(strong,document.createElement('br'),document.createTextNode(`${kr(total(l))} · ${statuses[l.status]}`),document.createElement('br'));const link=document.createElement('a');link.href=l.url;link.textContent='Åpne FINN ↗';link.target='_blank';link.rel='noopener';popup.append(link);marker.bindPopup(popup);
-  }}
+    const popup=document.createElement('article');popup.className='property-popup-card';
+    const heading=document.createElement('div');heading.className='property-popup-heading';const tag=document.createElement('span');tag.className='property-popup-type';tag.textContent='FINN-KANDIDAT';const status=document.createElement('span');status.className='property-popup-badge';status.textContent=statuses[l.status];heading.append(tag,status);
+    const title=document.createElement('h3');title.className='property-popup-address';title.textContent=l.address;
+    const subtitle=document.createElement('p');subtitle.className='property-popup-subtitle';subtitle.textContent=`${num(l.area)} m² · ${l.district}`;
+    const prices=document.createElement('div');prices.className='property-popup-metrics';
+    for(const [label,value] of [['Prisantydning',l.price],['Fellesgjeld',l.debt],['Omkostninger',l.fees],['Felleskostnader / mnd.',l.monthly]]){const cell=document.createElement('div'),caption=document.createElement('small'),amount=document.createElement('strong');caption.textContent=label;amount.textContent=kr(value);cell.append(caption,amount);prices.append(cell);}
+    const totalPrice=document.createElement('div');totalPrice.className='property-popup-profit';const totalLabel=document.createElement('small'),totalValue=document.createElement('strong'),note=document.createElement('span');totalLabel.textContent='Totalpris inkl. omkostninger';totalValue.textContent=kr(total(l));note.textContent='Annonsepriser · ikke oppnådd salgspris';totalPrice.append(totalLabel,totalValue,note);
+    const link=document.createElement('a');link.className='button primary property-popup-action';link.href=l.url;link.textContent='Åpne originalannonsen på FINN ↗';link.target='_blank';link.rel='noopener';popup.append(heading,title,subtitle,prices,totalPrice,link);
+    marker.bindPopup(popup,{className:'kvadrat-property-popup',minWidth:260,maxWidth:360,maxHeight:430});mapMarkers.set(l.id,marker);
+  }
+   if(selectedMapId&&mapMarkers.has(selectedMapId))mapMarkers.get(selectedMapId).openPopup();
+  }
   const placed=rows.filter(l=>l.lat!==null&&l.lng!==null).length;$('#listing-map-count').textContent=`${placed} av ${rows.length} kandidater har kartposisjon`;
  }
  function activate(){
@@ -51,7 +61,7 @@ export function createListingOverview({getState,commit,openProject,toast,escape,
   try{
    if(button.dataset.favorite){if(await save([{...l,favorite:!l.favorite}]))render();}
    else if(button.dataset.editListing)edit(l);
-   else {button.disabled=true;const placed=await locate(l);if(!placed)return;render();if(button.dataset.locateListing){$('#listing-map-disclosure').open=true;activate();listingMap?.setView([placed.lat,placed.lng],16);$('#listing-map').scrollIntoView({behavior:'smooth',block:'center'});}
+   else {button.disabled=true;const placed=await locate(l);if(!placed)return;if(button.dataset.locateListing)selectedMapId=placed.id;render();if(button.dataset.locateListing){$('#listing-map-disclosure').open=true;activate();listingMap?.invalidateSize({animate:false});listingMap?.setView([placed.lat,placed.lng],16);mapMarkers.get(placed.id)?.openPopup();$('#listing-map').scrollIntoView({behavior:'smooth',block:'center'});}
    else openProject(null,{name:l.address,address:l.address,area:l.area,lat:placed.lat,lng:placed.lng,purchase:l.price,debt:l.debt,resale:l.price,ownership:l.ownership,monthly:l.monthly,stampBase:l.ownership==='selveier'?l.price:0,buyFees:l.ownership==='selveier'?Math.max(0,l.fees-l.price*.025):l.fees,renovation:0,notes:`FINN-kandidat: ${l.url}\n${l.notes}\nPrisantydning er ikke oppnådd pris. Forventet salg er satt lik prisantydning; oppussingsbudsjett er 0. Vurder og erstatt alle økonomiske forutsetninger. Kontroller omkostninger og fellesgjeld før bruk.`});}
   }catch(error){toast(error.message,true);}finally{button.disabled=false;}
  });

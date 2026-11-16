@@ -38,3 +38,21 @@ test('property map fits project and property positions and keeps overlapping rec
  const actions=popupNodes.filter(n=>n.type==='button');assert.equal(actions.length,4);actions[0].onclick();assert.equal(opened,'p1');
  element('#property-filter').value='historisk';ui.render();assert.equal(markers.length,1);assert.deepEqual(markers[0].point,[64.015,11.495]);
 });
+
+test('FINN show-on-map opens the chosen listing price popup even from a collapsed map',async t=>{
+ const {readFileSync}=await import('node:fs');const listing=JSON.parse(readFileSync(new URL('../data/listings.json',import.meta.url))).listings[0];
+ const previous={window:globalThis.window,document:globalThis.document,L:globalThis.L,fetch:globalThis.fetch,location:globalThis.location};t.after(()=>Object.assign(globalThis,previous));
+ const elements=new Map(),element=id=>{if(!elements.has(id))elements.set(id,{value:'',clientWidth:700,clientHeight:340,events:{},addEventListener(name,fn){this.events[name]=fn;},scrollIntoView(){}});return elements.get(id);};
+ const node=()=>({children:[],append(...items){this.children.push(...items);}});let lastMarker;
+ const map={setView(){return this;},invalidateSize(){}};
+ const L={map:()=>map,layerGroup:()=>({addTo(){return this;},clearLayers(){}}),tileLayer:()=>({addTo(){return this;},on(){return this;}}),circleMarker:()=>{const marker={opened:false,addTo(){return this;},bindPopup(popup){this.popup=popup;return this;},openPopup(){this.opened=true;return this;}};lastMarker=marker;return marker;}};
+ Object.assign(globalThis,{window:{L,addEventListener(){}},L,location:{hash:'#annonser'},fetch:async()=>Response.json({listings:[],coverage:'Test',checkedAt:'2026-11-13'}),document:{querySelector:element,createElement:node}});
+ const ui=createListingOverview({getState:()=>({listings:[listing]}),commit(){throw new Error('No write needed for known coordinates');},openProject(){},toast:message=>assert.fail(message),escape:s=>s,kr:value=>`${value} kr`,num:String,stat:()=>''});
+ await new Promise(resolve=>setImmediate(resolve));
+ element('#listing-map-disclosure').open=false;const button={dataset:{locateListing:listing.id}};
+ await element('#listing-table').events.click({target:{closest:()=>button}});
+ assert.equal(element('#listing-map-disclosure').open,true);assert.equal(lastMarker.opened,true);assert.equal(button.disabled,false);
+ const flatten=node=>[node,...(node.children||[]).flatMap(flatten)];const text=flatten(lastMarker.popup).map(n=>n.textContent||'').join(' ');
+ for(const value of ['Prisantydning','Fellesgjeld','Omkostninger','Totalpris inkl. omkostninger',`${listing.price} kr`,`${listing.price+listing.debt+listing.fees} kr`])assert.ok(text.includes(value),value);
+ ui.render();assert.equal(lastMarker.opened,true,'rerender must retain the selected price popup');
+});
