@@ -26,7 +26,10 @@ export function createListingOverview({getState,commit,openProject,toast,escape,
     for(const [label,value] of [['Prisantydning',l.price],['Fellesgjeld',l.debt],['Omkostninger',l.fees],['Felleskostnader / mnd.',l.monthly]]){const cell=document.createElement('div'),caption=document.createElement('small'),amount=document.createElement('strong');caption.textContent=label;amount.textContent=kr(value);cell.append(caption,amount);prices.append(cell);}
     const totalPrice=document.createElement('div');totalPrice.className='property-popup-profit';const totalLabel=document.createElement('small'),totalValue=document.createElement('strong'),note=document.createElement('span');totalLabel.textContent='Totalpris inkl. omkostninger';totalValue.textContent=kr(total(l));note.textContent='Annonsepriser · ikke oppnådd salgspris';totalPrice.append(totalLabel,totalValue,note);
     const link=document.createElement('a');link.className='button primary property-popup-action';link.href=l.url;link.textContent='Åpne originalannonsen på FINN ↗';link.target='_blank';link.rel='noopener';popup.append(heading,title,subtitle,prices,totalPrice,link);
-    marker.bindPopup(popup,{className:'kvadrat-property-popup',minWidth:260,maxWidth:360,maxHeight:430});mapMarkers.set(l.id,marker);
+    marker.bindPopup(popup,{className:'kvadrat-property-popup',minWidth:260,maxWidth:360,maxHeight:430});
+    const preview=document.createElement('div');preview.className='listing-map-preview';const previewAddress=document.createElement('strong'),previewPrice=document.createElement('span');previewAddress.textContent=l.address;previewPrice.textContent=`${num(l.area)} m² · ${kr(total(l))} totalt`;preview.append(previewAddress,previewPrice);
+    marker.bindTooltip(preview,{permanent:true,direction:'top',offset:[0,-10],className:'listing-price-tooltip',opacity:1});
+    marker.on('mouseover',()=>{selectedMapId=l.id;marker.openPopup();});mapMarkers.set(l.id,marker);
   }
    if(selectedMapId&&mapMarkers.has(selectedMapId))mapMarkers.get(selectedMapId).openPopup();
   }

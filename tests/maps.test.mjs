@@ -45,10 +45,11 @@ test('FINN show-on-map opens the chosen listing price popup even from a collapse
  const elements=new Map(),element=id=>{if(!elements.has(id))elements.set(id,{value:'',clientWidth:700,clientHeight:340,events:{},addEventListener(name,fn){this.events[name]=fn;},scrollIntoView(){}});return elements.get(id);};
  const node=()=>({children:[],append(...items){this.children.push(...items);}});let lastMarker;
  const map={setView(){return this;},invalidateSize(){}};
- const L={map:()=>map,layerGroup:()=>({addTo(){return this;},clearLayers(){}}),tileLayer:()=>({addTo(){return this;},on(){return this;}}),circleMarker:()=>{const marker={opened:false,addTo(){return this;},bindPopup(popup){this.popup=popup;return this;},openPopup(){this.opened=true;return this;}};lastMarker=marker;return marker;}};
+ const L={map:()=>map,layerGroup:()=>({addTo(){return this;},clearLayers(){}}),tileLayer:()=>({addTo(){return this;},on(){return this;}}),circleMarker:()=>{const marker={opened:false,events:{},on(name,callback){this.events[name]=callback;return this;},bindTooltip(tooltip,options){this.tooltip=tooltip;this.tooltipOptions=options;return this;},addTo(){return this;},bindPopup(popup){this.popup=popup;return this;},openPopup(){this.opened=true;return this;}};lastMarker=marker;return marker;}};
  Object.assign(globalThis,{window:{L,addEventListener(){}},L,location:{hash:'#annonser'},fetch:async()=>Response.json({listings:[],coverage:'Test',checkedAt:'2026-11-13'}),document:{querySelector:element,createElement:node}});
  const ui=createListingOverview({getState:()=>({listings:[listing]}),commit(){throw new Error('No write needed for known coordinates');},openProject(){},toast:message=>assert.fail(message),escape:s=>s,kr:value=>`${value} kr`,num:String,stat:()=>''});
  await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(lastMarker.tooltipOptions.permanent,true);assert.equal(lastMarker.tooltip.children[0].textContent,listing.address);assert.match(lastMarker.tooltip.children[1].textContent,/totalt/);lastMarker.events.mouseover();assert.equal(lastMarker.opened,true,'hover opens prices without a table action');
  element('#listing-map-disclosure').open=false;const button={dataset:{locateListing:listing.id}};
  await element('#listing-table').events.click({target:{closest:()=>button}});
  assert.equal(element('#listing-map-disclosure').open,true);assert.equal(lastMarker.opened,true);assert.equal(button.disabled,false);
