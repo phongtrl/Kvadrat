@@ -4,7 +4,7 @@ import {validateListing} from './core.js';
 
 export function createListingOverview({getState,commit,openProject,toast,escape,kr,num,stat}){
  const $=s=>document.querySelector(s);
- let supplied=[],listingMap,layers,editing=null,loaded=false,selectedMapId=null;const mapMarkers=new Map();
+ let supplied=[],listingMap,layers,editing=null,loaded=false,selectedMapId=null;const mapMarkers=new Map();let lookupVersion=0,lookupBusy=false,fetchedPoint=null;
  const statuses={annonsert:'Annonsert · ubekreftet',ukjent:'Ukjent',solgt:'Merket solgt',trukket:'Trukket'};
  const all=()=>{const rows=new Map(supplied.map(l=>[l.id,l]));for(const row of getState().listings||[])rows.set(row.id,row);return [...rows.values()];};
  const total=l=>l.price+l.debt+l.fees;
@@ -47,7 +47,7 @@ export function createListingOverview({getState,commit,openProject,toast,escape,
    render();}
   if(listingMap)setTimeout(()=>listingMap.invalidateSize(),50);
  }
- function edit(l=null){editing=l;const form=$('#listing-form');form.reset();if(l)for(const [key,value]of Object.entries(l)){const field=form.elements.namedItem(key);if(field){if(field.type==='checkbox')field.checked=!!value;else field.value=value??'';}}$('#listing-dialog').showModal();}
+ function edit(l=null){editing=l;fetchedPoint=null;lookupVersion++;lookupBusy=false;const form=$('#listing-form');form.reset();$('#listing-auto-fields').hidden=!l;$('#listing-auto-fields').disabled=!l;$('#save-listing').disabled=!l;$('#fetch-listing').disabled=false;$('#listing-fetch-status').textContent='';if(l)for(const [key,value]of Object.entries(l)){const field=form.elements.namedItem(key);if(field){if(field.type==='checkbox')field.checked=!!value;else field.value=value??'';}}$('#listing-dialog').showModal();}
  async function locate(l){
   if(l.lat!==null&&l.lng!==null)return l;
   const response=await apiFetch('/api/addresses?'+new URLSearchParams({q:l.address}),{signal:AbortSignal.timeout(10000)});const data=await response.json();if(!response.ok)throw new Error(data.error||'Adressesøket feilet.');
@@ -55,10 +55,29 @@ export function createListingOverview({getState,commit,openProject,toast,escape,
   if(exact.length!==1)throw new Error('Fant ikke én entydig adresse i Trondheim. Kontroller adressen under Rediger.');
   const p=exact[0].representasjonspunkt;const row={...l,lat:p.lat,lng:p.lon};return await save([row])?row:null;
  }
+ function showListingFields(){const fields=$('#listing-auto-fields');fields.hidden=false;fields.disabled=false;$('#save-listing').disabled=false;}
+ async function lookupListing(){
+  if(lookupBusy)return;const form=$('#listing-form'),url=form.elements.url.value.trim(),started=++lookupVersion;
+  if(!url){$('#listing-fetch-status').textContent='Lim inn FINN-lenken først.';return;}
+  lookupBusy=true;$('#fetch-listing').disabled=true;$('#save-listing').disabled=true;$('#listing-fetch-status').textContent='Henter annonseopplysninger …';
+  try{const response=await apiFetch('/api/listing-preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url}),signal:AbortSignal.timeout(18000)});const result=await response.json();if(started!==lookupVersion)return;if(!response.ok)throw new Error(result.error||'Kunne ikke hente annonseopplysninger.');
+   for(const key of ['title','address','district','area','price','debt','fees','monthly','ownership','checkedAt'])form.elements.namedItem(key).value=result.fields[key]??'';
+   fetchedPoint={address:result.fields.address,lat:result.fields.lat??null,lng:result.fields.lng??null};form.elements.url.value=result.fields.url;form.elements.status.value='ukjent';showListingFields();
+   const labels={title:'tittel',address:'adresse',district:'område',area:'BRA-i',price:'prisantydning',debt:'fellesgjeld',fees:'omkostninger',monthly:'felleskostnader',ownership:'eierform'};
+   $('#listing-fetch-status').textContent=result.missing.length?'Noen opplysninger mangler: '+result.missing.map(k=>labels[k]||k).join(', ')+'. Fyll dem inn og kontroller resten før lagring.':'Opplysninger hentet. Kontroller priser, eierform og adresse, og velg Lagre annonse.';
+  }catch(error){if(started===lookupVersion)$('#listing-fetch-status').textContent=error.message;}
+  finally{if(started===lookupVersion){lookupBusy=false;$('#fetch-listing').disabled=false;$('#save-listing').disabled=$('#listing-auto-fields').disabled;}}
+ }
+ $('#fetch-listing').onclick=lookupListing;
+ $('#manual-listing').onclick=()=>{lookupVersion++;lookupBusy=false;$('#fetch-listing').disabled=false;showListingFields();$('#listing-fetch-status').textContent='Manuell registrering. Kontroller alle beløp mot originalannonsen.';};
+ $('#listing-form [name="url"]').addEventListener('input',()=>{lookupVersion++;lookupBusy=false;$('#fetch-listing').disabled=false;$('#save-listing').disabled=true;if(!editing){$('#listing-auto-fields').hidden=true;$('#listing-auto-fields').disabled=true;}$('#listing-fetch-status').textContent='Velg Hent annonseopplysninger for den nye lenken.';});
+ $('#listing-form [name="url"]').addEventListener('change',()=>{if(!editing)lookupListing();});
+ $('#listing-form [name="url"]').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();lookupListing();}});
+ $('#listing-dialog').addEventListener('close',()=>{lookupVersion++;lookupBusy=false;});
  $('#retry-listing-map').onclick=()=>{if(!window.L)location.reload();else activate();};
  window.addEventListener('load',()=>{if(location.hash==='#annonser'||!location.hash)activate();});
  $('#add-listing').onclick=()=>edit();$('#close-listing').onclick=()=>$('#listing-dialog').close();
- $('#listing-form').addEventListener('submit',async e=>{e.preventDefault();try{const form=$('#listing-form'),values=Object.fromEntries(new FormData(form));const same=editing?.address===values.address;const row=validateListing({...values,checkedAt:values.checkedAt||null,renovation:form.elements.renovation.checked,favorite:editing?.favorite||false,lat:same?editing.lat:null,lng:same?editing.lng:null});if(await save([row])){$('#listing-dialog').close();render();toast('Annonsen er lagret på nett.');}}catch(error){toast(error.message,true);}});
+ $('#listing-form').addEventListener('submit',async e=>{e.preventDefault();try{const form=$('#listing-form'),values=Object.fromEntries(new FormData(form));const same=editing?.address===values.address;const row=validateListing({...values,checkedAt:values.checkedAt||null,renovation:form.elements.renovation.checked,favorite:editing?.favorite||false,lat:same?editing.lat:fetchedPoint?.address===values.address?fetchedPoint.lat:null,lng:same?editing.lng:fetchedPoint?.address===values.address?fetchedPoint.lng:null});if(await save([row])){$('#listing-dialog').close();render();toast('Annonsen er lagret på nett.');}}catch(error){toast(error.message,true);}});
  $('#listing-table').addEventListener('click',async e=>{
   const button=e.target.closest('button');if(!button)return;
   const id=button.dataset.favorite||button.dataset.editListing||button.dataset.locateListing||button.dataset.listingProject,l=all().find(l=>l.id===id);if(!l)return;

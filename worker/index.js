@@ -1,4 +1,5 @@
-import {SCHEMA_VERSION, validateBackup} from '../core.js';
+import {parseListingPage} from './listing-preview.js';
+import {SCHEMA_VERSION, validateBackup, parseFinnUrl} from '../core.js';
 import demoSales from '../data/demo-sales.json' with {type:'json'};
 import {assets} from '../.generated/assets.js';
 import {authenticate,handleAuth,allowedRequestOrigin} from './auth.js';
@@ -36,6 +37,19 @@ export async function handleApi(request,env){
   const user=await authenticate(request,env);
   if(!user)return error('Logg inn for å åpne arbeidsområdet.',401);
   const userId=`account:${user.username}`;
+  if(url.pathname==='/api/listing-preview'){
+    if(request.method!=='POST')return error('Metoden er ikke tillatt.',405);
+    if(!allowedRequestOrigin(request))return error('Ukjent nettsted.',403);
+    if(!request.headers.get('content-type')?.startsWith('application/json'))return error('Send JSON.',415);
+    let target;try{const body=JSON.parse(await readBounded(request,4096));target=parseFinnUrl(body.url);}catch{return error('Legg inn en gyldig FINN-lenke til en boligannonse.',400);}
+    try{
+      const response=await fetch(target.url,{redirect:'manual',signal:AbortSignal.timeout(12000),headers:{Accept:'text/html'}});
+      if(response.status===403||response.status===429)return error('FINN blokkerer automatisk henting av denne annonsen. Opplysningene kunne ikke leses. Du kan fortsatt registrere annonsen manuelt.',422);
+      if(!response.ok)return error('Annonsen er ikke tilgjengelig for automatisk henting. Kontroller lenken eller bruk manuell registrering.',422);
+      if(!response.headers.get('content-type')?.includes('text/html'))return error('Annonsen returnerte ikke en lesbar nettside.',422);
+      return json(parseListingPage(await readBounded(response,1500000),target.url));
+    }catch{return error('Kunne ikke hente annonsen. Prøv igjen eller bruk manuell registrering.',502);}
+  }
   if(url.pathname==='/api/addresses'){
     if(request.method!=='GET')return error('Metoden er ikke tillatt.',405);
     const q=(url.searchParams.get('q')||'').trim();if(q.length<3||q.length>200)return error('Søk med mellom 3 og 200 tegn.',400);

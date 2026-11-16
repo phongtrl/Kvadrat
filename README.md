@@ -146,3 +146,18 @@ Klienten sender innloggingshandlinger som vanlige URL-kodede skjemadata til `/kv
 Grensesnittet kjører på `https://phongtrl.github.io/Kvadrat/` uten videresending. `api-client.js` sender kun API-kall til den publiserte Worker-serveren. Statiske JSON-filer lastes relativt til modulen, slik at `/Kvadrat/`-undermappen støttes. Backend tillater CORS kun fra sin egen opprinnelse og `https://phongtrl.github.io`, med eksplisitt forhåndskontroll av metode og headere.
 
 GitHub-grensesnittet sender ikke eller mottar øktkapsler fra et annet nettsted. Etter gyldig innlogging får det en tilfeldig øktnøkkel som lagres i localStorage på GitHub-opprinnelsen og sendes i Authorization-headeren. Brukernavn og passord lagres ikke i nettleseren eller i URL. Økten gjenopprettes ved omlasting og gjenåpning, og fjernes ved utlogging eller HTTP 401. Andre faner oppdager utlogging gjennom storage-hendelsen. Samme-origin-bruk på Worker-domenet bruker sikre HttpOnly-kapsler med nettleserens maksimale levetid på 400 dager. Serversesjoner avsluttes ved utlogging eller passordendring; sletting av nettleserdata krever ny innlogging. Lokal lagring som er blokkert av nettleseren, gir kun innlogging i gjeldende sideøkt.
+
+## URL-basert annonseutfylling
+
+«Legg til annonse» starter med en FINN-lenke og forsøker et autentisert serveroppslag
+på `/api/listing-preview`. Ingen API-nøkkel eller nettleserøkt sendes til FINN.
+Kun kanoniske HTTPS-lenker til boligannonser på FINN aksepteres, redirects følges
+ikke, og svar begrenses i størrelse og tid. Publiserte JSON-LD-adresser og eksplisitt
+merkede annonsefelt kan fylle skjemaet. Generisk floorSize brukes ikke som BRA-i,
+og ukjente beløp blir ikke satt til null. Brukeren kontrollerer og lagrer dataene.
+
+FINN returnerte HTTP 403 fra miljøet ved kontroll 16.11.2026. URL-basert import
+kan derfor ikke loves å fungere for FINN nå; appen viser blokkeringen og tilbyr
+manuell registrering. Parserens positive test bruker en syntetisk semantisk
+HTML-fixture, ikke en verifisert live FINN-side. Fullstendig URL-only utfylling
+krever en tilgjengelig annonsekilde som faktisk inneholder de nødvendige feltene.

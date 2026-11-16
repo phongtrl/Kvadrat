@@ -131,18 +131,23 @@ export function validateProperty(p){
   return {id:textField(p.id,'Bolig-ID',100),address:textField(p.address,'Adresse',200),stage:p.stage,lat:numberField(p.lat,'Breddegrad',62,66),lng:numberField(p.lng,'Lengdegrad',8,15),notes:typeof p.notes==='string'?p.notes.slice(0,5000):'',completedAt:date};
 }
 
-export function validateListing(l){
-  if(!l||typeof l!=='object')throw new Error('Ugyldig annonse.');
-  let url;try{url=new URL(l.url);}catch{throw new Error('Ugyldig FINN-lenke.');}
+export function parseFinnUrl(value){
+  let url;try{url=new URL(value);}catch{throw new Error('Ugyldig FINN-lenke.');}
   if(url.protocol!=='https:'||!['www.finn.no','finn.no'].includes(url.hostname)||url.username||url.password||url.port)throw new Error('Bruk en HTTPS-lenke til FINN.no.');
   const id=url.searchParams.get('finnkode')||(url.pathname.match(/^\/realestate\/homes\/ad\/(\d+)\/?$/)||[])[1];
   if(!id||!/^\d{6,12}$/.test(id)||!/^\/realestate\/homes\/(?:ad\.html|ad\/\d+\/?)$/.test(url.pathname))throw new Error('FINN-lenken må vise en boligannonse med FINN-kode.');
+  return {id,url:`https://www.finn.no/realestate/homes/ad.html?finnkode=${id}`};
+}
+
+export function validateListing(l){
+  if(!l||typeof l!=='object')throw new Error('Ugyldig annonse.');
+  const {id,url:normalizedUrl}=parseFinnUrl(l.url);
   if(!['annonsert','solgt','ukjent','trukket'].includes(l.status))throw new Error('Ugyldig annonsestatus.');
   if(!['selveier','borettslag'].includes(l.ownership))throw new Error('Ugyldig eierform.');
   const coords=l.lat!==null&&l.lat!==undefined&&l.lng!==null&&l.lng!==undefined;
   const checkedAt=l.checkedAt==null?null:textField(l.checkedAt,'Kontrolldato',10);
   if(checkedAt&&(!/^\d{4}-\d{2}-\d{2}$/.test(checkedAt)||!Number.isFinite(Date.parse(checkedAt))||new Date(checkedAt).toISOString().slice(0,10)!==checkedAt))throw new Error('Ugyldig kontrolldato.');
-  return {id,url:`https://www.finn.no/realestate/homes/ad.html?finnkode=${id}`,address:textField(l.address,'Adresse',200),district:textField(l.district,'Område',100),title:textField(l.title,'Tittel',250),area:numberField(l.area,'BRA-i',1,10000),price:numberField(l.price,'Prisantydning',1,1e9),debt:numberField(l.debt,'Fellesgjeld',0,1e9),fees:numberField(l.fees,'Omkostninger',0,1e9),monthly:numberField(l.monthly,'Felleskostnader',0,1e9),ownership:l.ownership,status:l.status,renovation:l.renovation===true,favorite:l.favorite===true,notes:typeof l.notes==='string'?l.notes.slice(0,5000):'',checkedAt,lat:coords?numberField(l.lat,'Breddegrad',63.1,63.6):null,lng:coords?numberField(l.lng,'Lengdegrad',9.8,10.8):null};
+  return {id,url:normalizedUrl,address:textField(l.address,'Adresse',200),district:textField(l.district,'Område',100),title:textField(l.title,'Tittel',250),area:numberField(l.area,'BRA-i',1,10000),price:numberField(l.price,'Prisantydning',1,1e9),debt:numberField(l.debt,'Fellesgjeld',0,1e9),fees:numberField(l.fees,'Omkostninger',0,1e9),monthly:numberField(l.monthly,'Felleskostnader',0,1e9),ownership:l.ownership,status:l.status,renovation:l.renovation===true,favorite:l.favorite===true,notes:typeof l.notes==='string'?l.notes.slice(0,5000):'',checkedAt,lat:coords?numberField(l.lat,'Breddegrad',63.1,63.6):null,lng:coords?numberField(l.lng,'Lengdegrad',9.8,10.8):null};
 }
 
 export function csvExport(rows) {
