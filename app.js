@@ -1,3 +1,4 @@
+import {enableCtrlWheelZoom} from './map-controls.js';
 import {createWorkspaceOverview} from './workspace-overview.js';
 import {createProjectFlow} from './project-flow.js';
 import {createProjectLocation} from './project-location.js';
@@ -121,12 +122,12 @@ function initMap(){
   if(!ready||!element.clientWidth||!element.clientHeight)return;
   if(map){map.invalidateSize({animate:false});return;}
   if(!window.L){$('#map-failure').hidden=false;return;}
-  map=L.map('map',{zoomControl:false,scrollWheelZoom:false}).setView([63.431,10.408],13);
+  map=L.map('map',{zoomControl:false,scrollWheelZoom:true}).setView([63.431,10.408],13);enableCtrlWheelZoom(element);
   L.control.zoom({position:'topright'}).addTo(map);
   const tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,referrerPolicy:'origin',attribution:'© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(map);
   let tileErrors=0;tiles.on('tileerror',()=>{if(++tileErrors>=5){$('#map-failure').textContent='Bakgrunnskartet er utilgjengelig. Salgspunkter, listevisning og kalkyler kan fortsatt brukes.';$('#map-failure').hidden=false;}});tiles.on('tileload',()=>{$('#map-failure').hidden=true;tileErrors=0;});
   markerGroup=L.layerGroup().addTo(map);
-  $('#map-home').onclick=()=>{map.setView([63.431,10.408],13);map.invalidateSize();};
+  $('#map-home').onclick=()=>{map.setView([63.431,10.408],13);enableCtrlWheelZoom(element);map.invalidateSize();};
   if(window.ResizeObserver)new ResizeObserver(()=>{if(element.clientWidth&&element.clientHeight)map.invalidateSize({animate:false});}).observe(element);
   renderMarkers();
 }

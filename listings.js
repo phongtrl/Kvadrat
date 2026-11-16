@@ -1,3 +1,4 @@
+import {enableCtrlWheelZoom} from './map-controls.js';
 import {apiFetch} from './api-client.js';
 import {validateListing} from './core.js';
 
@@ -39,7 +40,7 @@ export function createListingOverview({getState,commit,openProject,toast,escape,
   const element=$('#listing-map');
   if(!element.clientWidth||!element.clientHeight)return;
   if(!window.L){$('#listing-map-error').textContent='Kartbiblioteket kunne ikke lastes. Prøv å laste kartet på nytt.';$('#listing-map-error').hidden=false;$('#retry-listing-map').hidden=false;return;}
-  if(!listingMap&&window.L){listingMap=L.map('listing-map',{scrollWheelZoom:false}).setView([63.40,10.40],11);const tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,referrerPolicy:'origin',attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(listingMap);layers=L.layerGroup().addTo(listingMap);
+  if(!listingMap&&window.L){listingMap=L.map('listing-map',{scrollWheelZoom:true}).setView([63.40,10.40],11);enableCtrlWheelZoom(element);const tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,referrerPolicy:'origin',attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(listingMap);layers=L.layerGroup().addTo(listingMap);
    let failures=0;tiles.on('tileerror',()=>{if(++failures>=3){$('#listing-map-error').textContent='Bakgrunnskartet kunne ikke lastes. Kandidatlisten er fortsatt tilgjengelig.';$('#listing-map-error').hidden=false;$('#retry-listing-map').hidden=false;}});tiles.on('tileload',()=>{failures=0;$('#listing-map-error').hidden=true;$('#retry-listing-map').hidden=true;});
    $('#retry-listing-map').onclick=()=>{activate();tiles.redraw();};
    if(window.ResizeObserver)new ResizeObserver(()=>{if(element.clientWidth&&element.clientHeight)listingMap.invalidateSize({animate:false});}).observe(element);

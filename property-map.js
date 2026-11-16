@@ -1,3 +1,4 @@
+import {enableCtrlWheelZoom} from './map-controls.js';
 import {apiFetch} from './api-client.js';
 import {validateProperty,calculate} from './core.js';
 export function propertyMapRows(state,stage=''){
@@ -46,7 +47,7 @@ export function createPropertyMap({getState,commit,toast,escape,openProject,conf
  function activate(){
   const element=$('#property-map');if(!element.clientWidth||!element.clientHeight)return;
   if(!window.L){$('#property-map-error').hidden=false;return;}
-  if(!map){map=L.map('property-map',{scrollWheelZoom:false}).setView([63.43,10.4],10);layers=L.layerGroup().addTo(map);
+  if(!map){map=L.map('property-map',{scrollWheelZoom:true}).setView([63.43,10.4],10);enableCtrlWheelZoom(element);layers=L.layerGroup().addTo(map);
    const tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,referrerPolicy:'origin',attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
    tiles.on('tileerror',()=>$('#property-map-error').hidden=false);tiles.on('tileload',()=>$('#property-map-error').hidden=true);
    map.on('click',e=>{if(e.latlng.lat<62||e.latlng.lat>66||e.latlng.lng<8||e.latlng.lng>15){toast('Velg et sted i Trøndelag-området.',true);return;}edit(null,e.latlng);});

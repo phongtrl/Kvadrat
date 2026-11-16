@@ -1,3 +1,4 @@
+import {enableCtrlWheelZoom} from './map-controls.js';
 import {apiFetch} from './api-client.js';
 export const validProjectPoint=(lat,lng)=>Number.isFinite(lat)&&Number.isFinite(lng)&&lat>=62&&lat<=66&&lng>=8&&lng<=15;
 export function createProjectLocation({fetcher=apiFetch}={}){
@@ -14,7 +15,7 @@ export function createProjectLocation({fetcher=apiFetch}={}){
  function activate(){
   sequence++;$('#project-location-search-button').disabled=false;$('#project-location-results').replaceChildren();$('#project-location-search').value=field('address').value;status('Søk etter adresse, klikk i kartet eller dra markøren. Endringer lagres sammen med prosjektet.');
   const element=$('#project-location-map');if(!window.L){status('Kartet kunne ikke lastes. Bruk adressesøk eller fyll inn koordinatene nedenfor.');return;}
-  if(!map){map=L.map('project-location-map',{scrollWheelZoom:false}).setView([63.43,10.4],12);const tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,referrerPolicy:'origin',attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);tiles.on('tileerror',()=>status('Bakgrunnskartet er utilgjengelig. Adressesøk og koordinatfeltene kan fortsatt brukes.'));map.on('click',e=>place(e.latlng.lat,e.latlng.lng));if(window.ResizeObserver)new ResizeObserver(()=>{if(element.clientWidth&&element.clientHeight)map.invalidateSize({animate:false});}).observe(element);}
+  if(!map){map=L.map('project-location-map',{scrollWheelZoom:true}).setView([63.43,10.4],12);enableCtrlWheelZoom(element);const tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,referrerPolicy:'origin',attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);tiles.on('tileerror',()=>status('Bakgrunnskartet er utilgjengelig. Adressesøk og koordinatfeltene kan fortsatt brukes.'));map.on('click',e=>place(e.latlng.lat,e.latlng.lng));if(window.ResizeObserver)new ResizeObserver(()=>{if(element.clientWidth&&element.clientHeight)map.invalidateSize({animate:false});}).observe(element);}
   const p=point();if(validProjectPoint(p.lat,p.lng)){place(p.lat,p.lng,true);status('Kontroller plasseringen. Søk etter adresse, klikk i kartet eller dra markøren for å flytte prosjektet.');}
   map.invalidateSize({animate:false});
  }
